@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/SD-System-back.iml" filepath="$PROJECT_DIR$/.idea/SD-System-back.iml" />
-      <module fileurl="file://$PROJECT_DIR$/erp/erp.iml" filepath="$PROJECT_DIR$/erp/erp.iml" />
     </modules>
   </component>
 </project>
