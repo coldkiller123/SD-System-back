@@ -1,14 +1,8 @@
-package org.example.erp.entity;
-
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+package org.example.erp.dto;
 
 import java.math.BigDecimal;
 
-@TableName("inquiries")
-public class inquiries {
-    private String inquiryId;
+public class InquiryCreateDTO {
     private String customerId;
     private String customerName;
     private String productId;
@@ -17,16 +11,9 @@ public class inquiries {
     private String unit;
     private String salesPerson;
     private String inquiryDate;
-    private String status;
+    private String remarks;
 
-    public String getInquiryId() {
-        return inquiryId;
-    }
-
-    public void setInquiryId(String inquiryId) {
-        this.inquiryId = inquiryId;
-    }
-
+    // Getters and Setters
     public String getCustomerId() {
         return customerId;
     }
@@ -91,11 +78,11 @@ public class inquiries {
         this.inquiryDate = inquiryDate;
     }
 
-    public String getStatus() {
-        return status;
+    public String getRemarks() {
+        return remarks;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    public void setRemarks(String remarks) {
+        this.remarks = remarks;
     }
 }
