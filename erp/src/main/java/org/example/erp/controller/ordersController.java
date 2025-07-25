@@ -73,4 +73,22 @@ public class ordersController {
         OrderDetailDTO orderDetail = orderService.getOrderDetail(id);
         return new ResponseEntity<>(orderDetail, HttpStatus.OK);
     }
+    /**
+     * 获取未发货订单列表（状态为“已付款”）
+     * GET /api/orders/unshipped
+     */
+    @GetMapping("/unshipped")
+    public ResponseEntity<UnshippedOrderResponseDTO> getUnshippedOrders(
+            @RequestParam int page,
+            @RequestParam(required = false, defaultValue = "10") int page_size,
+            @RequestParam(required = false) String search) {
+
+        UnshippedOrderQueryDTO queryDTO = new UnshippedOrderQueryDTO();
+        queryDTO.setPage(page);
+        queryDTO.setPage_size(page_size);
+        queryDTO.setSearch(search);
+
+        UnshippedOrderResponseDTO response = orderService.getUnshippedOrders(queryDTO);
+        return ResponseEntity.ok(response);
+    }
 }
