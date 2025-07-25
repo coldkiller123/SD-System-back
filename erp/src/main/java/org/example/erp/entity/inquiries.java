@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 
 @TableName("inquiries")
 public class inquiries {
+    @TableId(type = IdType.INPUT)
     private String inquiryId;
     private String customerId;
     private String customerName;
