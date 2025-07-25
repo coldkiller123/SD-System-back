@@ -1,13 +1,14 @@
 package org.example.erp.controller;
 
+import org.example.erp.dto.OrderCreateDTO;
 import org.example.erp.dto.OrderQueryParam;
 import org.example.erp.dto.PageResult;
 import org.example.erp.entity.orders;
 import org.example.erp.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -23,5 +24,11 @@ public class ordersController {
     @GetMapping
     public PageResult<orders> getOrders(OrderQueryParam queryParam) {
         return orderService.getOrders(queryParam);
+    }
+
+    @PostMapping
+    public ResponseEntity<orders> createOrder(@RequestBody OrderCreateDTO orderDTO) {
+        orders createdOrder = orderService.createOrder(orderDTO);
+        return new ResponseEntity<>(createdOrder, HttpStatus.CREATED);
     }
 }

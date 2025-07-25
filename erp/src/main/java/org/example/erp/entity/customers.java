@@ -15,7 +15,7 @@ public class customers {
     private String creditRating;
     private int contactId;
     private String remarks;
-    private int taxId;
+    private String taxId;
     private String createdAt;
 
     public String getId() {
@@ -106,11 +106,11 @@ public class customers {
         this.remarks = remarks;
     }
 
-    public int getTaxId() {
+    public String getTaxId() {
         return taxId;
     }
 
-    public void setTaxId(int taxId) {
+    public void setTaxId(String taxId) {
         this.taxId = taxId;
     }
 
