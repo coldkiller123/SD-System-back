@@ -6,11 +6,14 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.example.erp.dto.OrderCreateDTO;
 import org.example.erp.dto.OrderQueryParam;
+import org.example.erp.dto.OrderUpdateDTO;
 import org.example.erp.dto.PageResult;
 import org.example.erp.entity.customers;
+import org.example.erp.entity.order_histories;
 import org.example.erp.entity.orders;
 import org.example.erp.entity.products;
 import org.example.erp.mapper.customersMapper;
+import org.example.erp.mapper.order_historiesMapper;
 import org.example.erp.mapper.ordersMapper;
 import org.example.erp.mapper.productsMapper;
 import org.example.erp.service.OrderService;
@@ -33,6 +36,9 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
     @Autowired
     private productsMapper productsMapper;
+
+    @Autowired
+    private order_historiesMapper orderHistoriesMapper;
 
     @Override
     public PageResult<orders> getOrders(OrderQueryParam queryParam) {
@@ -111,6 +117,54 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         baseMapper.insert(order);
 
         return order;
+    }
+    @Override
+    @Transactional
+    public orders updateOrder(String orderId, OrderUpdateDTO updateDTO) {
+        // 1. 验证订单是否存在
+        orders existingOrder = baseMapper.selectById(orderId);
+        if (existingOrder == null) {
+            throw new IllegalArgumentException("订单不存在，无法修改");
+        }
+
+        // 2. 验证客户和商品是否有效（同创建订单逻辑）
+        customers customer = customersMapper.selectById(updateDTO.getCustomerId());
+        if (customer == null) {
+            throw new IllegalArgumentException("客户不存在");
+        }
+        products product = productsMapper.selectById(updateDTO.getProductId());
+        if (product == null) {
+            throw new IllegalArgumentException("商品不存在");
+        }
+
+        // 3. 验证库存（若订单状态已发货，不允许修改数量，避免库存异常）
+        if ("已发货".equals(existingOrder.getStatus())
+                && existingOrder.getQuantity().compareTo(updateDTO.getQuantity()) != 0) {
+            throw new IllegalArgumentException("已发货订单不允许修改数量");
+        }
+        if (product.getQuantity().compareTo(updateDTO.getQuantity()) < 0) {
+            throw new IllegalArgumentException("库存不足");
+        }
+
+        // 4. 复制可修改字段（排除不可编辑的createdAt和orderId）
+        BeanUtils.copyProperties(updateDTO, existingOrder, "id", "createdAt");
+        // 强制覆盖modifiedAt为当前时间（忽略前端传入值，确保准确性）
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+        existingOrder.setCreatedAt(existingOrder.getCreatedAt()); // 保留原始创建时间
+        existingOrder.setHasInvoice(updateDTO.getPaidAmount().compareTo(BigDecimal.ZERO) > 0); // 同步更新开票状态
+
+        // 5. 保存更新后的订单
+        baseMapper.updateById(existingOrder);
+
+        // 6. 记录订单修改历史（到order_histories表）
+        order_histories history = new order_histories();
+        history.setOrderId(orderId);
+        history.setModifiedBy(updateDTO.getModifiedBy());
+        history.setRemarks(updateDTO.getRemarks() != null ?
+                "修改：" + updateDTO.getRemarks() : "无备注修改");
+        orderHistoriesMapper.insert(history);
+
+        return existingOrder;
     }
 
     /**
