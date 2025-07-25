@@ -1,6 +1,7 @@
 package org.example.erp.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -165,6 +166,16 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         orderHistoriesMapper.insert(history);
 
         return existingOrder;
+    }
+    @Override
+    public order_histories getLatestHistory(String orderId) {
+        // 构建查询条件：按订单ID查询，按修改时间倒序，取第一条
+        LambdaQueryWrapper<order_histories> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(order_histories::getOrderId, orderId)
+                .orderByDesc(order_histories::getModifiedAt)
+                .last("LIMIT 1"); // 只取最新的一条
+
+        return orderHistoriesMapper.selectOne(queryWrapper);
     }
 
     /**
