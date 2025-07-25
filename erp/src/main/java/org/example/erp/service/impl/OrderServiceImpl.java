@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implements OrderService {
@@ -217,5 +218,57 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         String dateStr = sdf.format(new Date());
         String randomStr = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         return "ORD" + dateStr + randomStr;
+    }
+    @Override
+    public UnshippedOrderResponseDTO getUnshippedOrders(UnshippedOrderQueryDTO queryDTO) {
+        // 1. 构建分页对象（page从1开始，MyBatis-Plus页码直接对应）
+        Page<orders> page = new Page<>(queryDTO.getPage(), queryDTO.getPage_size());
+
+        // 2. 构建查询条件：状态为“已付款”，支持搜索
+        LambdaQueryWrapper<orders> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(orders::getStatus, "已付款"); // 只查询“已付款”的订单
+
+        // 搜索关键字（订单号、客户名称、商品名称）
+        String search = queryDTO.getSearch();
+        if (search != null && !search.isEmpty()) {
+            queryWrapper.and(w -> w
+                    .like(orders::getId, search) // 订单号
+                    .or().like(orders::getCustomerName, search) // 客户名称
+                    .or().like(orders::getProductName, search) // 商品名称
+            );
+        }
+
+        // 3. 执行分页查询
+        Page<orders> resultPage = baseMapper.selectPage(page, queryWrapper);
+
+        // 4. 转换为响应DTO
+        UnshippedOrderResponseDTO response = new UnshippedOrderResponseDTO();
+        UnshippedOrderResponseDTO.Data data = new UnshippedOrderResponseDTO.Data();
+        data.setTotal((int) resultPage.getTotal());
+        data.setPage(queryDTO.getPage());
+        data.setPage_size(queryDTO.getPage_size());
+
+        // 转换订单列表
+        List<UnshippedOrderResponseDTO.OrderItem> orderItems = resultPage.getRecords().stream()
+                .map(order -> {
+                    UnshippedOrderResponseDTO.OrderItem item = new UnshippedOrderResponseDTO.OrderItem();
+                    item.setId(order.getId());
+                    item.setCustomerId(order.getCustomerId());
+                    item.setCustomerName(order.getCustomerName());
+                    item.setProductName(order.getProductName());
+                    item.setQuantity(order.getQuantity());
+                    item.setOrderDate(order.getCreatedAt()); // 假设订单日期是createdAt
+                    item.setAmount(order.getTotalAmount());
+                    item.setStatus(order.getStatus());
+                    return item;
+                })
+                .collect(Collectors.toList());
+        data.setOrders(orderItems);
+
+        response.setCode(200);
+        response.setMessage("成功");
+        response.setData(data);
+
+        return response;
     }
 }

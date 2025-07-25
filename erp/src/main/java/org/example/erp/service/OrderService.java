@@ -11,4 +11,5 @@ public interface OrderService extends IService<orders> {
     orders updateOrder(String orderId, OrderUpdateDTO updateDTO);
     order_histories getLatestHistory(String orderId);
     OrderDetailDTO getOrderDetail(String orderId);
+    UnshippedOrderResponseDTO getUnshippedOrders(UnshippedOrderQueryDTO queryDTO);
 }
