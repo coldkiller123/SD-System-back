@@ -3,6 +3,7 @@ package org.example.erp.controller;
 import org.example.erp.dto.InquiryCreateDTO;
 import org.example.erp.dto.InquiryPageResult;
 import org.example.erp.dto.InquiryQueryParam;
+import org.example.erp.dto.InquiryStatusUpdateDTO;
 import org.example.erp.entity.inquiries;
 import org.example.erp.service.InquiryService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,5 +39,16 @@ public class inquiriesController {
     public ResponseEntity<InquiryPageResult> getInquiries(InquiryQueryParam queryParam) {
         InquiryPageResult result = inquiryService.getInquiries(queryParam);
         return new ResponseEntity<>(result, HttpStatus.OK);
+    }
+    /**
+     * 7. 更新询价单状态接口
+     * PUT /api/inquiries/{inquiryId}/status
+     */
+    @PutMapping("/{inquiryId}/status")
+    public ResponseEntity<inquiries> updateInquiryStatus(
+            @PathVariable String inquiryId,
+            @RequestBody InquiryStatusUpdateDTO updateDTO) {
+        inquiries updatedInquiry = inquiryService.updateInquiryStatus(inquiryId, updateDTO);
+        return new ResponseEntity<>(updatedInquiry, HttpStatus.OK);
     }
 }

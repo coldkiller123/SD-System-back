@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.example.erp.dto.InquiryCreateDTO;
 import org.example.erp.dto.InquiryPageResult;
 import org.example.erp.dto.InquiryQueryParam;
+import org.example.erp.dto.InquiryStatusUpdateDTO;
 import org.example.erp.entity.customers;
 import org.example.erp.entity.inquiries;
 import org.example.erp.entity.products;
@@ -94,5 +95,33 @@ public class InquiryServiceImpl extends ServiceImpl<inquiriesMapper, inquiries> 
         pageResult.setPageCount((int) Math.ceil((double) resultPage.getTotal() / queryParam.getPageSize()));
 
         return pageResult;
+    }
+    /**
+     * 更新询价单状态（从“未报价”到“已报价”）
+     */
+    @Override
+    @Transactional
+    public inquiries updateInquiryStatus(String inquiryId, InquiryStatusUpdateDTO updateDTO) {
+        // 1. 验证询价单是否存在
+        inquiries inquiry = baseMapper.selectById(inquiryId);
+        if (inquiry == null) {
+            throw new IllegalArgumentException("询价单不存在：" + inquiryId);
+        }
+
+        // 2. 验证状态变更合法性（仅允许从“未报价”更新为“已报价”）
+        if (!"未报价".equals(inquiry.getStatus())) {
+            throw new IllegalArgumentException("仅“未报价”状态可更新为“已报价”，当前状态：" + inquiry.getStatus());
+        }
+        if (!"已报价".equals(updateDTO.getStatus())) {
+            throw new IllegalArgumentException("状态更新不合法，仅支持更新为“已报价”");
+        }
+
+        // 3. 更新状态
+        inquiry.setStatus(updateDTO.getStatus());
+        baseMapper.updateById(inquiry);
+
+        // （可选）若需记录状态变更历史，可在此处新增操作日志到历史表
+
+        return inquiry;
     }
 }
