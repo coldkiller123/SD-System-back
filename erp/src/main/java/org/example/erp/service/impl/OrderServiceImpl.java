@@ -1,14 +1,10 @@
 package org.example.erp.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import org.example.erp.dto.OrderCreateDTO;
-import org.example.erp.dto.OrderQueryParam;
-import org.example.erp.dto.OrderUpdateDTO;
-import org.example.erp.dto.PageResult;
+import org.example.erp.dto.*;
 import org.example.erp.entity.customers;
 import org.example.erp.entity.order_histories;
 import org.example.erp.entity.orders;
@@ -26,7 +22,9 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -176,6 +174,39 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
                 .last("LIMIT 1"); // 只取最新的一条
 
         return orderHistoriesMapper.selectOne(queryWrapper);
+    }
+    @Override
+    public OrderDetailDTO getOrderDetail(String orderId) {
+        // 1. 查询订单基本信息
+        orders order = baseMapper.selectById(orderId);
+        if (order == null) {
+            throw new IllegalArgumentException("订单不存在：" + orderId);
+        }
+
+        // 2. 转换为订单详情DTO
+        OrderDetailDTO detailDTO = new OrderDetailDTO();
+        BeanUtils.copyProperties(order, detailDTO);
+
+        // 3. 查询该订单的所有操作历史
+        LambdaQueryWrapper<order_histories> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(order_histories::getOrderId, orderId)
+                .orderByDesc(order_histories::getModifiedAt); // 按修改时间倒序（最新的在前）
+        List<order_histories> histories = orderHistoriesMapper.selectList(queryWrapper);
+
+        // 4. 转换历史记录为DTO列表
+        List<OrderHistoryDTO> historyDTOs = new ArrayList<>();
+        for (order_histories history : histories) {
+            OrderHistoryDTO historyDTO = new OrderHistoryDTO();
+            BeanUtils.copyProperties(history, historyDTO);
+            // 若历史记录ID是数字类型，转换为字符串（避免前端处理问题）
+            historyDTO.setId(String.valueOf(history.getId()));
+            historyDTOs.add(historyDTO);
+        }
+
+        // 5. 设置历史记录到详情DTO
+        detailDTO.setHistory(historyDTOs);
+
+        return detailDTO;
     }
 
     /**

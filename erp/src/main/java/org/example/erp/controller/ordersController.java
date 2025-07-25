@@ -1,9 +1,6 @@
 package org.example.erp.controller;
 
-import org.example.erp.dto.OrderCreateDTO;
-import org.example.erp.dto.OrderQueryParam;
-import org.example.erp.dto.OrderUpdateDTO;
-import org.example.erp.dto.PageResult;
+import org.example.erp.dto.*;
 import org.example.erp.entity.order_histories;
 import org.example.erp.entity.orders;
 import org.example.erp.service.OrderService;
@@ -70,5 +67,10 @@ public class ordersController {
         }
 
         return new ResponseEntity<>(response, HttpStatus.OK);
+    }
+    @GetMapping("/{id}")
+    public ResponseEntity<OrderDetailDTO> getOrderDetail(@PathVariable String id) {
+        OrderDetailDTO orderDetail = orderService.getOrderDetail(id);
+        return new ResponseEntity<>(orderDetail, HttpStatus.OK);
     }
 }
