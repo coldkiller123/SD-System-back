@@ -3,9 +3,13 @@ package org.example.erp.controller;
 import org.example.erp.dto.CustomerCreateRequest;
 import org.example.erp.dto.CustomerUpdateRequest;
 import org.example.erp.dto.CustomerListResponse;
+import org.example.erp.dto.FileUploadResponse;
+import org.example.erp.dto.CustomerDetailResponse;
+
 import org.example.erp.service.CustomerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +21,7 @@ public class customersController {
     @Autowired
     private CustomerService customerService;
 
-    // 已有更新接口（保持不变）
+    // 已有更新接口
     @PutMapping("/update")
     public Map<String, Object> updateCustomer(@RequestParam("id") String customerId,
                                               @RequestBody CustomerUpdateRequest request) {
@@ -49,5 +53,19 @@ public class customersController {
             @RequestParam(required = false) String industry) {
 
         return customerService.getCustomerList(pageIndex, pageSize, name, region, industry);
+    }
+
+    //查询客户信息详情
+    @GetMapping("/detail")
+    public CustomerDetailResponse getCustomerDetail(@RequestParam("id") String customerId) {
+        return customerService.getCustomerDetail(customerId);
+    }
+
+    //客户附件上传接口
+    @PostMapping("/upload")
+    public FileUploadResponse uploadFiles(
+            @RequestParam("id") String customerId,
+            @RequestParam("file") MultipartFile[] files) {
+        return customerService.uploadAttachments(customerId, files);
     }
 }
