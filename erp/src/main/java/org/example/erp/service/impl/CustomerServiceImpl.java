@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.example.erp.dto.CustomerCreateRequest;
 import org.example.erp.dto.CustomerUpdateRequest;
 import org.example.erp.dto.CustomerListResponse;
+import org.example.erp.dto.FileUploadResponse;
+import org.example.erp.dto.CustomerDetailResponse;
 
 import org.example.erp.entity.attachments;
 import org.example.erp.entity.contacts;
@@ -15,14 +17,20 @@ import org.example.erp.mapper.contactsMapper;
 import org.example.erp.mapper.customersMapper;
 import org.example.erp.service.CustomerService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+
 
 @Service
 public class CustomerServiceImpl implements CustomerService {
@@ -34,7 +42,11 @@ public class CustomerServiceImpl implements CustomerService {
     private contactsMapper contactsMapper;
 
     @Autowired
-    private attachmentsMapper attachmentsMapper; // 附件Mapper
+    private attachmentsMapper attachmentsMapper;
+
+    // 从配置文件读取上传根路径，建议在application.properties中配置
+    @Value("${file.upload.base-path:/uploads}")
+    private String baseUploadPath;
 
     @Transactional
     @Override
@@ -159,13 +171,14 @@ public class CustomerServiceImpl implements CustomerService {
                 attachments attachment = new attachments();
                 attachment.setCustomerId(customerId);
                 attachment.setFileName(filename);
-                attachment.setFilePath("/upload/customers/" + customerId + "/" + filename);
+                attachment.setFilePath("/uploads/customers/" + customerId + "/" + filename);
                 attachmentsMapper.insert(attachment);
             }
         }
         return customerId;
     }
 
+    //查询客户分页
     @Override
     public CustomerListResponse getCustomerList(int pageIndex, Integer pageSize,
                                                 String name, String region, String industry) {
@@ -241,5 +254,141 @@ public class CustomerServiceImpl implements CustomerService {
 
         return response;
     }
+
+    //查询客户详情
+    @Override
+    public CustomerDetailResponse getCustomerDetail(String customerId) {
+        // 1. 查询客户基本信息
+        customers customer = customersMapper.selectById(customerId);
+        if (customer == null) {
+            throw new RuntimeException("客户不存在: " + customerId);
+        }
+
+        // 2. 查询联系人信息
+        List<contacts> contactList = new ArrayList<>();
+        if (customer.getContactId() != 0) {
+            contacts contact = contactsMapper.selectById(customer.getContactId());
+            if (contact != null) {
+                contactList.add(contact);
+            }
+        }
+
+        // 3. 查询附件信息
+        QueryWrapper<attachments> attachmentQuery = Wrappers.query();
+        attachmentQuery.eq("customerId", customerId);
+        List<attachments> attachmentList = attachmentsMapper.selectList(attachmentQuery);
+
+        // 4. 转换为响应DTO
+        CustomerDetailResponse response = new CustomerDetailResponse();
+        CustomerDetailResponse.Info info = new CustomerDetailResponse.Info();
+
+        // 设置客户基本信息
+        info.setId(customer.getId());
+        info.setName(customer.getName());
+        info.setType(customer.getType());
+        info.setRegion(customer.getRegion());
+        info.setIndustry(customer.getIndustry());
+        info.setCompany(customer.getCompany());
+        info.setPhone(customer.getPhone());
+        info.setAddress(customer.getAddress());
+        info.setCreditRating(customer.getCreditRating());
+        info.setCreatedAt(customer.getCreatedAt());
+        info.setRemarks(customer.getRemarks());
+
+        // 设置联系人信息
+        List<CustomerDetailResponse.ContactDTO> contactDTOs = contactList.stream().map(contact -> {
+            CustomerDetailResponse.ContactDTO dto = new CustomerDetailResponse.ContactDTO();
+            dto.setId(String.valueOf(contact.getId()));
+            dto.setName(contact.getName());
+            dto.setPosition(contact.getPosition());
+            dto.setPhone(contact.getPhone());
+            dto.setEmail(contact.getEmail());
+            return dto;
+        }).collect(Collectors.toList());
+        info.setContacts(contactDTOs);
+
+        // 设置附件信息
+        List<CustomerDetailResponse.AttachmentDTO> attachmentDTOs = attachmentList.stream().map(attachment -> {
+            CustomerDetailResponse.AttachmentDTO dto = new CustomerDetailResponse.AttachmentDTO();
+            dto.setFilename(attachment.getFileName());
+            dto.setFilepath(attachment.getFilePath());
+            return dto;
+        }).collect(Collectors.toList());
+        info.setAttachments(attachmentDTOs);
+
+        response.setInfo(info);
+        return response;
+    }
+
+    //上传文件
+    @Transactional
+    @Override
+    public FileUploadResponse uploadAttachments(String customerId, MultipartFile[] files) {
+        // 1. 验证客户是否存在
+        customers customer = customersMapper.selectById(customerId);
+        if (customer == null) {
+            throw new RuntimeException("客户不存在: " + customerId);
+        }
+
+        // 2. 创建客户专属文件夹（如：/uploads/C1023/）
+        String customerUploadDir = baseUploadPath + File.separator + customerId;
+        File dir = new File(customerUploadDir);
+        if (!dir.exists()) {
+            boolean mkdirs = dir.mkdirs(); // 递归创建目录
+            if (!mkdirs) {
+                throw new RuntimeException("创建上传目录失败: " + customerUploadDir);
+            }
+        }
+
+        // 3. 处理上传文件
+        List<FileUploadResponse.AttachmentDTO> attachmentList = new ArrayList<>();
+        for (MultipartFile file : files) {
+            if (file.isEmpty()) {
+                continue; // 跳过空文件
+            }
+
+            try {
+                // 3.1 获取原始文件名
+                String originalFilename = file.getOriginalFilename();
+
+                // 3.2 处理文件名（可选项：添加UUID避免重名）
+                String filename = originalFilename;
+                // 如需避免重名可启用下面代码
+                // String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+                // String filename = UUID.randomUUID().toString() + extension;
+
+                // 3.3 保存文件到本地
+                String filePath = customerUploadDir + File.separator + filename;
+                File destFile = new File(filePath);
+                file.transferTo(destFile);
+
+                // 3.4 记录到附件表
+                attachments attachment = new attachments();
+                attachment.setCustomerId(customerId);
+                attachment.setFileName(originalFilename); // 保存原始文件名
+                attachment.setFilePath("/uploads/" + customerId + "/" + filename); // 存储相对路径
+                attachmentsMapper.insert(attachment);
+
+                // 3.5 添加到响应列表
+                FileUploadResponse.AttachmentDTO dto = new FileUploadResponse.AttachmentDTO();
+                dto.setFilename(originalFilename);
+                dto.setFilepath(attachment.getFilePath());
+                attachmentList.add(dto);
+
+            } catch (IOException e) {
+                throw new RuntimeException("文件上传失败: " + e.getMessage());
+            }
+        }
+
+        // 4. 构建并返回响应
+        FileUploadResponse response = new FileUploadResponse();
+        FileUploadResponse.FileUploadData data = new FileUploadResponse.FileUploadData();
+        data.setAttachments(attachmentList);
+        response.setData(data);
+
+        return response;
+    }
+
+
 }
 
