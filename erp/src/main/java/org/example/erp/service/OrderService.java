@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import org.example.erp.dto.*;
 import org.example.erp.entity.order_histories;
 import org.example.erp.entity.orders;
+import org.example.erp.dto.DeliveredOrdersResponse;
 
 public interface OrderService extends IService<orders> {
     PageResult<orders> getOrders(OrderQueryParam queryParam);
@@ -12,4 +13,7 @@ public interface OrderService extends IService<orders> {
     order_histories getLatestHistory(String orderId);
     OrderDetailDTO getOrderDetail(String orderId);
     UnshippedOrderResponseDTO getUnshippedOrders(UnshippedOrderQueryDTO queryDTO);
+
+    //查询已收货订单列表（支持分页和筛选）
+    DeliveredOrdersResponse getDeliveredOrders (Integer pageIndex, Integer pageSize, String orderId, String status);
 }

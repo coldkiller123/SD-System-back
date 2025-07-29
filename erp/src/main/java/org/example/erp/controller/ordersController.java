@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.example.erp.dto.DeliveredOrdersResponse;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -91,4 +92,15 @@ public class ordersController {
         UnshippedOrderResponseDTO response = orderService.getUnshippedOrders(queryDTO);
         return ResponseEntity.ok(response);
     }
+
+    //获取已收货订单列表（支持分页和筛选）
+    @GetMapping ("/delivered")
+    public DeliveredOrdersResponse getDeliveredOrders (
+            @RequestParam (required = false) Integer pageIndex,
+            @RequestParam (required = false) Integer pageSize,
+            @RequestParam (required = false) String orderId,
+            @RequestParam (required = false, defaultValue = "all") String status) {
+        return orderService.getDeliveredOrders (pageIndex, pageSize, orderId, status);
+    }
+
 }
