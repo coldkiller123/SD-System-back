@@ -26,8 +26,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import java.io.File;
 import java.io.IOException;
@@ -114,17 +115,27 @@ public class CustomerServiceImpl implements CustomerService {
     @Transactional
     @Override
     public String createCustomer(CustomerCreateRequest request) {
-        // 1. 生成客户唯一ID（不变）
-        String customerId = "CUST_" + UUID.randomUUID().toString().substring(0, 8)
-                + System.currentTimeMillis();
+        // 1. 验证地区代码有效性
+        String regionCode = getRegionCode(request.getRegion());
+        if (regionCode == null) {
+            throw new RuntimeException("无效的地区信息: " + request.getRegion());
+        }
 
-        // 2. 生成创建时间（不变）
+        // 2. 获取当前地区的最大流水号
+        int maxSerialNumber = getMaxSerialNumberByRegion(regionCode);
+
+        // 3. 生成5位流水号（自动递增）
+        String serialNumber = String.format("%05d", maxSerialNumber + 1);
+
+        // 4. 组合客户ID（CUS + 地区代码 + 5位流水号）
+        String customerId = "CUS" + regionCode + serialNumber;
+
+        // 5. 生成创建时间
         String createdAt = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-        // 3. 处理联系人（删除mainContact，直接获取联系人ID）
-        Integer contactId = null; // 直接用ID变量记录联系人ID
+        // 6. 处理联系人
+        Integer contactId = null;
         if (request.getContacts() != null && !request.getContacts().isEmpty()) {
-            // 取列表中第一个联系人（前端约定仅一个）
             CustomerCreateRequest.ContactDTO dto = request.getContacts().get(0);
 
             // 查询是否存在相同联系人
@@ -135,39 +146,37 @@ public class CustomerServiceImpl implements CustomerService {
             );
 
             if (existingContact != null) {
-                // 复用已有联系人，直接获取其ID
                 contactId = existingContact.getId();
             } else {
-                // 新增联系人，插入后获取ID
                 contacts newContact = new contacts();
                 newContact.setName(dto.getName());
                 newContact.setPhone(dto.getPhone());
                 newContact.setEmail(dto.getEmail());
                 newContact.setPosition(dto.getPosition());
                 contactsMapper.insert(newContact);
-                contactId = newContact.getId(); // 直接获取新联系人ID
+                contactId = newContact.getId();
             }
         } else {
             throw new RuntimeException("联系人信息不能为空");
         }
 
-        // 4. 保存客户基本信息（用contactId关联，不再依赖mainContact）
+        // 7. 保存客户基本信息
         customers customer = new customers();
         customer.setId(customerId);
         customer.setName(request.getName());
         customer.setType(request.getType());
-        customer.setRegion(request.getRegion());
+        customer.setRegion(request.getRegion()); // 保存原始地区名称
         customer.setIndustry(request.getIndustry());
         customer.setCompany(request.getCompany());
         customer.setPhone(request.getPhone());
         customer.setAddress(request.getAddress());
         customer.setCreditRating(request.getCreditRating());
-        customer.setContactId(contactId); // 直接使用contactId变量
+        customer.setContactId(contactId);
         customer.setRemarks(request.getRemarks());
         customer.setCreatedAt(createdAt);
         customersMapper.insert(customer);
 
-        // 5. 处理附件（不变）
+        // 8. 处理附件
         if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
             for (String filename : request.getAttachments()) {
                 attachments attachment = new attachments();
@@ -187,6 +196,41 @@ public class CustomerServiceImpl implements CustomerService {
         );
         return customerId;
     }
+
+    //将地区名称转换为对应的地区代码
+    private String getRegionCode(String regionName) {
+        // 实际应用中可改为从数据库或配置文件读取
+        Map<String, String> regionMap = new HashMap<>();
+        regionMap.put("东北地区", "NE");
+        regionMap.put("华北地区", "NC");
+        regionMap.put("华东地区", "EC");
+        regionMap.put("华南地区", "SC");
+        regionMap.put("西南地区", "SW");
+        regionMap.put("西北地区", "NW");
+        regionMap.put("中南地区", "CN");
+        regionMap.put("港澳台地区", "HMT");
+        regionMap.put("其他区域", "OTH");
+        return regionMap.get(regionName);
+    }
+
+    //获取指定地区的最大流水号
+    private int getMaxSerialNumberByRegion(String regionCode) {
+        QueryWrapper<customers> queryWrapper = new QueryWrapper<>();
+        queryWrapper.likeRight("id", "CUS" + regionCode);
+        queryWrapper.select("MAX(SUBSTRING(id, 6)) as maxSerial"); // 截取后5位流水号
+
+        List<Map<String, Object>> result = customersMapper.selectMaps(queryWrapper);
+
+        // 关键修改：处理列表为空或元素为null的情况
+        if (result == null || result.isEmpty() || result.get(0) == null) {
+            return 0; // 该地区无客户，从0开始
+        }
+
+        Object maxSerial = result.get(0).get("maxSerial");
+        // 处理maxSerial本身为null的情况（如无数据时）
+        return (maxSerial != null) ? Integer.parseInt(maxSerial.toString()) : 0;
+    }
+
 
     //查询客户分页
     @Override
