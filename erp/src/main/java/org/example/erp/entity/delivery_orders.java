@@ -1,5 +1,6 @@
 package org.example.erp.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -7,17 +8,17 @@ import static com.baomidou.mybatisplus.annotation.IdType.AUTO;
 
 @TableName("delivery_orders")
 public class delivery_orders {
-    @TableId(type = AUTO)
-    private int id;
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
     private String deliveryDate;
     private String warehouseManager;
     private String remarks;
 
-    public int getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(int id) {
+    public void setId(String id) {
         this.id = id;
     }
 

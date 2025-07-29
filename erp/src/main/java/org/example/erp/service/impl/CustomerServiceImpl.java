@@ -15,7 +15,9 @@ import org.example.erp.entity.customers;
 import org.example.erp.mapper.attachmentsMapper;
 import org.example.erp.mapper.contactsMapper;
 import org.example.erp.mapper.customersMapper;
+import org.example.erp.service.ActivityService;
 import org.example.erp.service.CustomerService;
+import org.example.erp.utils.SpringContextHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -175,6 +177,14 @@ public class CustomerServiceImpl implements CustomerService {
                 attachmentsMapper.insert(attachment);
             }
         }
+        // 记录活动日志
+        ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
+        activityService.recordActivity(
+                "新客户注册",
+                "客户名称：" + request.getName(),
+                "客户管理",
+                "blue"
+        );
         return customerId;
     }
 

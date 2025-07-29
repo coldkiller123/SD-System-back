@@ -9,7 +9,9 @@ import org.example.erp.mapper.customersMapper;
 import org.example.erp.mapper.invoicesMapper;
 import org.example.erp.mapper.ordersMapper;
 import org.example.erp.mapper.productsMapper;
+import org.example.erp.service.ActivityService;
 import org.example.erp.service.InvoiceService;
+import org.example.erp.utils.SpringContextHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -106,6 +108,14 @@ public class InvoiceServiceImpl implements InvoiceService {
         item.setDescription(product.getDescription());
         items.add(item);
         response.setItems(items);
+        // 记录活动日志
+        ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
+        activityService.recordActivity(
+                "新发票开具",
+                "发票号：" + invoiceId,
+                "财务管理",
+                "purple"
+        );
 
         return response;
     }
