@@ -16,4 +16,10 @@ public interface OrderService extends IService<orders> {
 
     //查询已收货订单列表（支持分页和筛选）
     DeliveredOrdersResponse getDeliveredOrders (Integer pageIndex, Integer pageSize, String orderId, String status);
+
+    // 获取状态为已发货&已完成的订单列表
+    OrderPageResponseDTO getInprocessOrders(String status, int page, int pageSize, String search);
+
+    // 修改订单状态（仅支持"已发货"→"已完成"）
+    OrderPageResponseDTO updateOrderStatus(String orderId, OrderStatusUpdateDTO updateDTO);
 }
