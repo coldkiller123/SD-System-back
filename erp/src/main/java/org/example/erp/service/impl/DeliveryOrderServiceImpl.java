@@ -12,7 +12,9 @@ import org.example.erp.mapper.delivery_order_itemsMapper;
 import org.example.erp.mapper.delivery_ordersMapper;
 import org.example.erp.mapper.ordersMapper;
 import org.example.erp.mapper.productsMapper;
+import org.example.erp.service.ActivityService;
 import org.example.erp.service.DeliveryOrderService;
+import org.example.erp.utils.SpringContextHolder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -85,8 +87,8 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
             deliveryOrder.setRemarks(createDTO.getRemarks());
             deliveryOrdersMapper.insert(deliveryOrder); // 插入后自动生成ID（AUTO自增）
 
-            // 获取自动生成的发货单ID（int类型）
-            int deliveryOrderId = deliveryOrder.getId();
+            // 获取自动生成的发货单ID（String类型）
+            String deliveryOrderId = deliveryOrder.getId();
             String deliveryOrderIdStr = String.valueOf(deliveryOrderId); // 转为字符串用于关联
 
             // 4. 创建发货单明细表记录（关联订单与发货单）
@@ -116,6 +118,14 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
                 order.setStatus("已发货");
                 ordersMapper.updateById(order);
             }
+            // 记录活动日志
+            ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
+            activityService.recordActivity(
+                    "新发货单创建",
+                    "发货单号：" + deliveryOrderIdStr,
+                    "物流管理",
+                    "orange"
+            );
 
             // 7. 返回成功响应（发货单ID）
             return DeliveryOrderResponseDTO.success(deliveryOrderIdStr);

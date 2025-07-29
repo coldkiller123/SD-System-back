@@ -9,9 +9,10 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.example.erp.dto.*;
 import org.example.erp.entity.*;
 import org.example.erp.mapper.*;
+import org.example.erp.service.ActivityService;
 import org.example.erp.service.OrderService;
 import org.example.erp.dto.DeliveredOrdersResponse;
-
+import org.example.erp.utils.SpringContextHolder;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -128,6 +129,14 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
         // 8. 保存订单
         baseMapper.insert(order);
+        // 记录活动日志
+        ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
+        activityService.recordActivity(
+                "新订单创建",
+                "订单号：" + order.getId(),
+                "订单管理",
+                "green"
+        );
 
         return order;
     }
