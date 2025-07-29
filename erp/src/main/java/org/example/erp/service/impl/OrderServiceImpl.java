@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 
+import jakarta.annotation.PostConstruct;
 import org.example.erp.dto.*;
 import org.example.erp.entity.*;
 import org.example.erp.mapper.*;
@@ -21,17 +22,16 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-import java.util.Map;
-import java.util.Set;
 
 
 @Service
 public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implements OrderService {
+
+    private int currentYear;
+    private AtomicInteger serialNumber;
 
     @Autowired
     private customersMapper customersMapper;
@@ -53,6 +53,52 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
     @Autowired
     private delivery_order_itemsMapper deliveryOrderItemsMapper;
+    /**
+     * 从数据库查询指定年份的最大流水号
+     * @param year 年份（如2025）
+     * @return 最大流水号（无记录则返回0）
+     */
+    private int queryMaxSerialFromDB(int year) {
+        // 构建查询条件：订单ID以"SO+年份"开头（如"SO2025"）
+        QueryWrapper<orders> queryWrapper = new QueryWrapper<>();
+        queryWrapper.likeRight("id", "SO" + year);
+        // 截取流水号部分（ID格式为SO202500015，从第6位开始是流水号）
+        queryWrapper.select("MAX(SUBSTRING(id, 6)) as maxSerial");
+
+        // 执行查询
+        List<Map<String, Object>> result = ordersMapper.selectMaps(queryWrapper);
+
+        // 处理查询结果（避免空指针）
+        if (result == null || result.isEmpty() || result.get(0) == null) {
+            return 0;
+        }
+
+        Object maxSerialObj = result.get(0).get("maxSerial");
+        if (maxSerialObj == null) {
+            return 0;
+        }
+
+        // 将查询结果转换为整数（流水号是数字字符串，如"00015"）
+        try {
+            return Integer.parseInt(maxSerialObj.toString());
+        } catch (NumberFormatException e) {
+            // 异常情况（如ID格式错误）默认返回0
+            return 0;
+        }
+    }
+    // 新增：初始化方法，从数据库加载当年最大流水号
+    @PostConstruct // 服务启动时自动执行
+    public void init() {
+        // 获取当前年份（如2025）
+        Calendar calendar = Calendar.getInstance();
+        currentYear = calendar.get(Calendar.YEAR);
+
+        // 从数据库查询当年已存在的最大流水号
+        int maxSerial = queryMaxSerialFromDB(currentYear);
+
+        // 初始化流水号（若数据库无记录，从1开始）
+        serialNumber = new AtomicInteger(maxSerial > 0 ? maxSerial : 1);
+    }
 
     @Override
     public PageResult<orders> getOrders(OrderQueryParam queryParam) {
@@ -109,7 +155,7 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
             throw new IllegalArgumentException("库存不足");
         }
 
-        // 4. 生成订单ID (可以根据业务规则生成，这里使用UUID)
+        // 4. 生成订单ID
         String orderId = generateOrderId();
 
         // 5. 转换DTO为实体对象
@@ -233,13 +279,30 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
     }
 
     /**
-     * 生成订单ID，格式：ORD+日期+随机数
+     * 生成订单ID，格式：SO + 年份（YYYY） + 5位流水号（如SO202500015）
      */
     private String generateOrderId() {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
-        String dateStr = sdf.format(new Date());
-        String randomStr = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        return "ORD" + dateStr + randomStr;
+        Calendar calendar = Calendar.getInstance();
+        int currentYearNow = calendar.get(Calendar.YEAR);
+
+        // 若跨年份（如从2024到2025），重置流水号
+        if (currentYearNow != currentYear) {
+            // 加锁保证线程安全（避免并发情况下重复初始化）
+            synchronized (this) {
+                if (currentYearNow != currentYear) {
+                    currentYear = currentYearNow;
+                    // 重新查询新年份的最大流水号（通常为0）
+                    int maxSerial = queryMaxSerialFromDB(currentYear);
+                    serialNumber.set(maxSerial > 0 ? maxSerial : 1);
+                }
+            }
+        }
+
+        // 获取当前流水号并自动递增（原子操作，线程安全）
+        int currentSerial = serialNumber.getAndIncrement();
+
+        // 格式化生成订单ID：SO + 年份 + 5位流水号（不足5位补0）
+        return String.format("SO%d%05d", currentYear, currentSerial);
     }
 
     @Override

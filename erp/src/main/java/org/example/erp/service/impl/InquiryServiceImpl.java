@@ -1,8 +1,10 @@
 package org.example.erp.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import jakarta.annotation.PostConstruct;
 import org.example.erp.dto.InquiryCreateDTO;
 import org.example.erp.dto.InquiryPageResult;
 import org.example.erp.dto.InquiryQueryParam;
@@ -18,19 +20,65 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class InquiryServiceImpl extends ServiceImpl<inquiriesMapper, inquiries> implements InquiryService {
 
+    // 新增：跟踪当前年份和流水号（原子类保证线程安全）
+    private int currentYear;
+    private AtomicInteger serialNumber;
     @Autowired
     private customersMapper customersMapper;
 
     @Autowired
     private productsMapper productsMapper;
+    /**
+     * 从数据库查询指定年份的最大流水号
+     * @param year 年份（如2025）
+     * @return 最大流水号（无记录返回0）
+     */
+    private int queryMaxSerialFromDB(int year) {
+        // 构建查询条件：询价单ID以"RFQ+年份"开头（如"RFQ2025"）
+        QueryWrapper<inquiries> queryWrapper = new QueryWrapper<>();
+        // 条件：询价单ID以"RFQ+年份"开头（直接传入数据库字段名）
+        queryWrapper.likeRight("inquiryId", "RFQ" + year);
+        // 指定查询字段（SQL片段）
+        queryWrapper.select("MAX(SUBSTRING(inquiryId, 6)) as maxSerial");
+
+        // 执行查询
+        List<Map<String, Object>> result = baseMapper.selectMaps(queryWrapper);
+
+        // 处理查询结果（避免空指针）
+        if (result == null || result.isEmpty() || result.get(0) == null) {
+            return 0;
+        }
+
+        Object maxSerialObj = result.get(0).get("maxSerial");
+        if (maxSerialObj == null) {
+            return 0;
+        }
+
+        // 转换为整数（流水号是数字字符串，如"00009"）
+        try {
+            return Integer.parseInt(maxSerialObj.toString());
+        } catch (NumberFormatException e) {
+            return 0; // 格式错误时默认返回0
+        }
+    }
+    // 新增：初始化方法，服务启动时加载当年最大流水号
+    @PostConstruct // 自动执行初始化
+    public void init() {
+        Calendar calendar = Calendar.getInstance();
+        currentYear = calendar.get(Calendar.YEAR); // 获取当前年份（如2025）
+
+        // 从数据库查询当年最大流水号
+        int maxSerial = queryMaxSerialFromDB(currentYear);
+
+        // 初始化流水号（无记录则从1开始）
+        serialNumber = new AtomicInteger(maxSerial > 0 ? maxSerial : 1);
+    }
 
     @Override
     @Transactional
@@ -47,17 +95,33 @@ public class InquiryServiceImpl extends ServiceImpl<inquiriesMapper, inquiries> 
             throw new IllegalArgumentException("商品不存在：" + inquiryDTO.getProductId());
         }
 
-        // 3. 生成询价单ID（格式：IQ + 日期 + 随机数）
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
-        String dateStr = sdf.format(new Date());
-        String randomStr = UUID.randomUUID().toString().replaceAll("-", "").substring(0, 6);
-        String inquiryId = "IQ" + dateStr + randomStr;
+        // 3. 生成询价单ID（新规则：RFQ + 年份 + 5位流水号）
+        Calendar calendar = Calendar.getInstance();
+        int currentYearNow = calendar.get(Calendar.YEAR);
+
+        // 跨年份时重置流水号
+        if (currentYearNow != currentYear) {
+            synchronized (this) { // 加锁保证线程安全
+                if (currentYearNow != currentYear) {
+                    currentYear = currentYearNow;
+                    // 重新查询新年份的最大流水号
+                    int maxSerial = queryMaxSerialFromDB(currentYear);
+                    serialNumber.set(maxSerial > 0 ? maxSerial : 1);
+                }
+            }
+        }
+
+// 获取当前流水号并递增
+        int currentSerial = serialNumber.getAndIncrement();
+// 格式化生成ID（RFQ + 年份 + 5位流水号，不足补0）
+        String inquiryId = String.format("RFQ%d%05d", currentYear, currentSerial);
 
         // 4. 复制DTO数据到实体类
         inquiries inquiry = new inquiries();
         BeanUtils.copyProperties(inquiryDTO, inquiry);
         inquiry.setInquiryId(inquiryId);
         inquiry.setStatus("未报价"); // 默认状态
+        inquiry.setCustomerName(customer.getName());
 
         // 5. 保存到数据库
         baseMapper.insert(inquiry);
@@ -119,8 +183,6 @@ public class InquiryServiceImpl extends ServiceImpl<inquiriesMapper, inquiries> 
         // 3. 更新状态
         inquiry.setStatus(updateDTO.getStatus());
         baseMapper.updateById(inquiry);
-
-        // （可选）若需记录状态变更历史，可在此处新增操作日志到历史表
 
         return inquiry;
     }
