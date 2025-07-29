@@ -7,20 +7,10 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 
 import org.example.erp.dto.*;
-import org.example.erp.entity.customers;
-import org.example.erp.entity.order_histories;
-import org.example.erp.entity.orders;
-import org.example.erp.entity.products;
-import org.example.erp.mapper.customersMapper;
-import org.example.erp.mapper.order_historiesMapper;
-import org.example.erp.mapper.ordersMapper;
-import org.example.erp.mapper.productsMapper;
+import org.example.erp.entity.*;
+import org.example.erp.mapper.*;
 import org.example.erp.service.OrderService;
 import org.example.erp.dto.DeliveredOrdersResponse;
-import org.example.erp.entity.invoices;
-import org.example.erp.entity.delivery_orders;
-import org.example.erp.mapper.invoicesMapper;
-import org.example.erp.mapper.delivery_ordersMapper;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +49,9 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
     @Autowired
     private invoicesMapper invoicesMapper;
+
+    @Autowired
+    private delivery_order_itemsMapper deliveryOrderItemsMapper;
 
     @Override
     public PageResult<orders> getOrders(OrderQueryParam queryParam) {
@@ -395,6 +388,108 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         response.setTotal (total);
         response.setPageCount ((int) Math.ceil ((double) total /pageSize));
 
+        return response;
+    }
+
+    // 获取状态为已发货&已完成的订单列表
+    @Override
+    public OrderPageResponseDTO getInprocessOrders(String status, int page, int pageSize, String search) {
+        // 1. 构建分页对象
+        Page<orders> orderPage = new Page<>(page, pageSize);
+
+        // 2. 解析状态参数（已发货,已完成）
+        String[] statusArr = status.split(",");
+
+        // 3. 构建查询条件
+        LambdaQueryWrapper<orders> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.in(orders::getStatus, statusArr); // 状态筛选
+
+        // 4. 搜索条件（订单号/发货单号/客户名称）
+        if (search != null && !search.isEmpty()) {
+            queryWrapper.and(w -> w
+                    .like(orders::getId, search) // 订单号
+                    .or().like(orders::getCustomerName, search) // 客户名称
+            );
+        }
+
+        // 5. 执行分页查询
+        Page<orders> resultPage = ordersMapper.selectPage(orderPage, queryWrapper);
+
+        // 6. 转换为响应DTO
+        OrderPageResponseDTO response = new OrderPageResponseDTO();
+        OrderPageResponseDTO.OrderPageData data = new OrderPageResponseDTO.OrderPageData();
+        data.setTotal(resultPage.getTotal());
+        data.setPage(page);
+        data.setPage_size(pageSize);
+
+        // 7. 转换订单列表（关联发货单）
+        data.setOrders(resultPage.getRecords().stream().map(order -> {
+            OrderItemDTO dto = new OrderItemDTO();
+            dto.setId(order.getId());
+            dto.setCustomerName(order.getCustomerName());
+            dto.setProductName(order.getProductName());
+            dto.setQuantity(order.getQuantity());
+            dto.setAmount(order.getTotalAmount());
+            dto.setOrderDate(order.getCreatedAt()); // 下单时间
+            dto.setStatus(order.getStatus());
+
+            // 查询关联的发货单ID（通过 delivery_order_items 中间表）
+            LambdaQueryWrapper<delivery_order_items> itemQuery = new LambdaQueryWrapper<>();
+            itemQuery.eq(delivery_order_items::getOrderId, order.getId());
+            delivery_order_items deliveryOrderItem = deliveryOrderItemsMapper.selectOne(itemQuery);
+
+            if (deliveryOrderItem != null) {
+                // 通过发货单ID查询发货单
+                LambdaQueryWrapper<delivery_orders> deliveryQuery = new LambdaQueryWrapper<>();
+                deliveryQuery.eq(delivery_orders::getId, deliveryOrderItem.getDeliveryOrderId());
+                delivery_orders deliveryOrder = deliveryOrdersMapper.selectOne(deliveryQuery);
+
+                if (deliveryOrder != null) {
+                    dto.setDeliveryOrderId(String.valueOf(deliveryOrder.getId())); // 发货单号
+                }
+            }
+
+            return dto;
+        }).collect(Collectors.toList()));
+
+        response.setData(data);
+        return response;
+    }
+
+    // 修改订单状态（仅支持"已发货"→"已完成"）
+    @Override
+    @Transactional
+    public OrderPageResponseDTO updateOrderStatus(String orderId, OrderStatusUpdateDTO updateDTO) {
+        OrderPageResponseDTO response = new OrderPageResponseDTO();
+
+        // 1. 校验新状态是否为"已完成"
+        if (!"已完成".equals(updateDTO.getStatus())) {
+            response.setCode(400);
+            response.setMessage("无效的状态值");
+            return response;
+        }
+
+        // 2. 查询订单是否存在
+        orders order = ordersMapper.selectById(orderId);
+        if (order == null) {
+            response.setCode(404);
+            response.setMessage("订单不存在");
+            return response;
+        }
+
+        // 3. 校验当前状态是否为"已发货"
+        if (!"已发货".equals(order.getStatus())) {
+            response.setCode(400);
+            response.setMessage("仅支持已发货状态更新为已完成");
+            return response;
+        }
+
+        // 4. 更新订单状态
+        order.setStatus("已完成");
+        ordersMapper.updateById(order);
+
+        // 5. 返回成功响应
+        response.setMessage("状态更新成功");
         return response;
     }
 }

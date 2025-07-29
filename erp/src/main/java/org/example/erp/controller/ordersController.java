@@ -103,4 +103,26 @@ public class ordersController {
         return orderService.getDeliveredOrders (pageIndex, pageSize, orderId, status);
     }
 
+    // 获取状态为已发货&已完成的订单列表
+    @GetMapping("/inprocess")
+    public ResponseEntity<OrderPageResponseDTO> getInprocessOrders(
+            @RequestParam String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int page_size,
+            @RequestParam(required = false) String search) {
+
+        OrderPageResponseDTO response = orderService.getInprocessOrders(status, page, page_size, search);
+        return ResponseEntity.ok(response);
+    }
+
+    // 修改订单状态
+    @PutMapping("/{orderId}/status")
+    public ResponseEntity<OrderPageResponseDTO> updateOrderStatus(
+            @PathVariable String orderId,
+            @RequestBody OrderStatusUpdateDTO updateDTO) {
+
+        OrderPageResponseDTO response = orderService.updateOrderStatus(orderId, updateDTO);
+        return ResponseEntity.status(response.getCode()).body(response);
+    }
+
 }
