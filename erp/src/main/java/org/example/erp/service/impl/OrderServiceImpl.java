@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+
 import org.example.erp.dto.*;
 import org.example.erp.entity.customers;
 import org.example.erp.entity.order_histories;
@@ -14,6 +16,12 @@ import org.example.erp.mapper.order_historiesMapper;
 import org.example.erp.mapper.ordersMapper;
 import org.example.erp.mapper.productsMapper;
 import org.example.erp.service.OrderService;
+import org.example.erp.dto.DeliveredOrdersResponse;
+import org.example.erp.entity.invoices;
+import org.example.erp.entity.delivery_orders;
+import org.example.erp.mapper.invoicesMapper;
+import org.example.erp.mapper.delivery_ordersMapper;
+
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,6 +35,9 @@ import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.Set;
+
 
 @Service
 public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implements OrderService {
@@ -39,6 +50,15 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
     @Autowired
     private order_historiesMapper orderHistoriesMapper;
+
+    @Autowired
+    private ordersMapper ordersMapper;
+
+    @Autowired
+    private delivery_ordersMapper deliveryOrdersMapper;
+
+    @Autowired
+    private invoicesMapper invoicesMapper;
 
     @Override
     public PageResult<orders> getOrders(OrderQueryParam queryParam) {
@@ -219,6 +239,7 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         String randomStr = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         return "ORD" + dateStr + randomStr;
     }
+
     @Override
     public UnshippedOrderResponseDTO getUnshippedOrders(UnshippedOrderQueryDTO queryDTO) {
         // 1. 构建分页对象（page从1开始，MyBatis-Plus页码直接对应）
@@ -271,4 +292,110 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
         return response;
     }
+
+
+    //获取已收货订单列表（支持分页和筛选）
+    @Override
+    public DeliveredOrdersResponse getDeliveredOrders (Integer pageIndex, Integer pageSize, String orderId, String status) {
+        // 1. 处理分页参数默认值
+        int defaultPageIndex = 0;
+        int defaultPageSize = 10;
+        pageIndex = (pageIndex == null || pageIndex < 0) ? defaultPageIndex : pageIndex;
+        pageSize = (pageSize == null || pageSize <= 0) ? defaultPageSize : pageSize;
+
+        // 2. 第一步：查询所有已生成交货单的订单 ID（通过发票间接关联）
+        // 2.1 查询所有发票，获取订单 ID 与交货单 ID 的映射
+        List<invoices> allInvoices = invoicesMapper.selectList (null);
+        Map<String, String> orderIdToDeliveryIdMap = allInvoices.stream ()
+                .filter (invoice -> invoice.getDeliveryOrderId () != null && !invoice.getDeliveryOrderId ().isEmpty ())
+                .collect (Collectors.toMap (
+                        invoices::getOrderId, //key: 订单 ID
+                        invoices::getDeliveryOrderId, //value: 交货单 ID
+                        (existing, replacement) -> existing // 若有重复订单 ID，保留第一个
+                ));
+        Set<String> deliveredOrderIds = orderIdToDeliveryIdMap.keySet (); // 已收货的订单 ID 集合
+
+        // 3. 第二步：构建订单查询条件（只查已收货的订单）
+        QueryWrapper<orders> queryWrapper = new QueryWrapper<>();
+        queryWrapper.in ("id", deliveredOrderIds); // 只包含已收货的订单 ID
+
+        // 3.1 订单编号模糊搜索
+        if (orderId != null && !orderId.trim ().isEmpty ()) {
+            queryWrapper.like ("id", orderId.trim ());
+        }
+
+        // 4. 执行分页查询
+        Page<orders> page = new Page<>(pageIndex + 1, pageSize); // MyBatis-Plus 页码从 1 开始
+        IPage<orders> orderPage = ordersMapper.selectPage(page, queryWrapper);
+        List<orders> orderList = orderPage.getRecords();
+        long total = orderPage.getTotal();
+
+        // 5. 第三步：处理状态筛选（已开票 / 待开票）
+        // 5.1 先获取所有已开票的订单 ID
+        Set<String> invoicedOrderIds = allInvoices.stream()
+                .map(invoices::getOrderId)
+                .collect(Collectors.toSet());
+
+        // 5.2 筛选订单
+        List<orders> filteredOrders = orderList.stream ()
+                .filter (order -> {
+                    boolean hasInvoice = invoicedOrderIds.contains (order.getId ());
+                    // 根据 status 筛选
+                    if ("invoiced".equals (status)) {
+                        return hasInvoice;
+                    } else if ("pending".equals (status)) {
+                        return !hasInvoice;
+                    } else { // 默认 all
+                        return true;
+                    }
+                })
+                .collect (Collectors.toList ());
+
+        // 6. 第四步：补充交货日期（从交货单表查询）
+        List<DeliveredOrdersResponse.OrderItem> orderItems = filteredOrders.stream ()
+                .map (order -> {
+                    DeliveredOrdersResponse.OrderItem item = new DeliveredOrdersResponse.OrderItem ();
+                    item.setId (order.getId ());
+                    item.setCustomerId (order.getCustomerId ());
+                    item.setCustomerName (order.getCustomerName ());
+                    item.setAmount (order.getTotalAmount ());
+                    item.setOrderDate (order.getCreatedAt ()); // 订单日期
+
+                    // 通过订单 ID→发票→交货单 ID→交货单，获取交货日期
+                    String deliveryOrderId = orderIdToDeliveryIdMap.get (order.getId ());
+                    if (deliveryOrderId != null) {
+                        delivery_orders deliveryOrder = deliveryOrdersMapper.selectById (deliveryOrderId);
+                        if (deliveryOrder != null) {
+                            item.setDeliveryDate (deliveryOrder.getDeliveryDate ()); // 收货日期
+                        }
+                    }
+
+                    item.setStatus ("已收货"); // 固定状态
+                    boolean hasInvoice = invoicedOrderIds.contains (order.getId ());
+                    item.setHasInvoice (hasInvoice);
+
+                    // 设置发票 ID
+                    if (hasInvoice) {
+                        invoices invoice = allInvoices.stream ()
+                                .filter (iv -> order.getId ().equals (iv.getOrderId ()))
+                                .findFirst ()
+                                .orElse (null);
+                        item.setInvoiceId (invoice != null ? invoice.getInvoiceId () : null);
+                    } else {
+                        item.setInvoiceId (null);
+                    }
+
+                    return item;
+                })
+                .collect(Collectors.toList());
+
+        // 7. 构建响应结果
+        DeliveredOrdersResponse response = new DeliveredOrdersResponse ();
+        response.setData (orderItems);
+        response.setTotal (total);
+        response.setPageCount ((int) Math.ceil ((double) total /pageSize));
+
+        return response;
+    }
 }
+
