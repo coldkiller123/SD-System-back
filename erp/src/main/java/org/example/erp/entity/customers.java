@@ -1,6 +1,8 @@
 package org.example.erp.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+
 
 @TableName("customers")
 public class customers {
@@ -17,6 +19,27 @@ public class customers {
     private String remarks;
     private String taxId;
     private String createdAt;
+    @TableField("modifiedAt")
+    private String modifiedAt;
+
+    public String getModifiedAt() {
+        return modifiedAt;
+    }
+
+    public void setModifiedAt(String modifiedAt) {
+        this.modifiedAt = modifiedAt;
+    }
+
+    public String getModifiedBy() {
+        return modifiedBy;
+    }
+
+    public void setModifiedBy(String modifiedBy) {
+        this.modifiedBy = modifiedBy;
+    }
+
+    @TableField("modifiedBy")
+    private String modifiedBy;
 
     public String getId() {
         return id;
