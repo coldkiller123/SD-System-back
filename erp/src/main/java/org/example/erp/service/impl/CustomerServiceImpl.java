@@ -69,6 +69,8 @@ public class CustomerServiceImpl implements CustomerService {
         customer.setAddress(request.getAddress());
         customer.setCreditRating(request.getCreditRating());
         customer.setRemarks(request.getRemarks());
+        customer.setModifiedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        customer.setModifiedBy(request.getModifiedBy()); // 本身是字符串，直接赋值
         customersMapper.updateById(customer);
 
         // 3. 处理联系人：直接更新原有联系人，而非删除重建
@@ -348,6 +350,8 @@ public class CustomerServiceImpl implements CustomerService {
         info.setCreditRating(customer.getCreditRating());
         info.setCreatedAt(customer.getCreatedAt());
         info.setRemarks(customer.getRemarks());
+        info.setModifiedAt(customer.getModifiedAt()); // 数据库是字符串，直接返回
+        info.setModifiedBy(customer.getModifiedBy());
 
         // 设置联系人信息
         List<CustomerDetailResponse.ContactDTO> contactDTOs = contactList.stream().map(contact -> {
