@@ -108,13 +108,27 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
                 currentDate = today;
                 dailySerial.set(maxSerial > 0 ? maxSerial : 1);
             }
-            // 生成当天流水号（自增）
-            int serial = dailySerial.getAndIncrement();
-            // 格式化为3位（不足补0）
-            return String.format("DEL%s-%03d", today, serial);
+
+            // 生成序号后校验是否存在，确保唯一（核心修改）
+            int serial;
+            String deliveryOrderId;
+            do {
+                serial = dailySerial.getAndIncrement();
+                deliveryOrderId = String.format("DEL%s-%03d", today, serial);
+            } while (checkDeliveryOrderIdExists(deliveryOrderId)); // 循环检查直到ID不存在
+
+            return deliveryOrderId;
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * 检查发货单号是否已存在于数据库
+     */
+    private boolean checkDeliveryOrderIdExists(String deliveryOrderId) {
+        // 调用mapper查询该ID是否存在
+        return deliveryOrdersMapper.selectById(deliveryOrderId) != null;
     }
 
     @Override
@@ -200,7 +214,7 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
             activityService.recordActivity(
                     "新发货单创建",
                     "发货单号：" + deliveryOrderId,
-                    "物流管理",
+                    "发货管理",
                     "orange"
             );
 

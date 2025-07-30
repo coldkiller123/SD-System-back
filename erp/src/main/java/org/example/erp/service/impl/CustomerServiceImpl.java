@@ -188,13 +188,13 @@ public class CustomerServiceImpl implements CustomerService {
                 attachmentsMapper.insert(attachment);
             }
         }
-        // 记录活动日志
+        // 新客户注册
         ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
         activityService.recordActivity(
-                "新客户注册",
-                "客户名称：" + request.getName(),
-                "客户管理",
-                "blue"
+                "新客户注册",                  // titleAct：活动标题
+                "客户名称：" + customer.getName(),  // 描述：包含客户名称
+                "客户管理",                    // 模块名（固定）
+                "blue"                         // 颜色（固定）
         );
         return customerId;
     }
