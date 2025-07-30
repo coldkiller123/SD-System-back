@@ -103,19 +103,30 @@ public class InvoiceServiceImpl implements InvoiceService {
         String today = getCurrentDateStr();
         lock.lock();
         try {
-            // 跨天时重置流水号
             if (!today.equals(currentDate)) {
+                // 跨天查询时，先检查数据库最新序号（避免遗漏）
                 int maxSerial = queryMaxDailySerial(today);
                 currentDate = today;
                 dailySerial.set(maxSerial > 0 ? maxSerial : 1);
             }
-            // 生成当天流水号（自增）
-            int serial = dailySerial.getAndIncrement();
-            // 格式化为3位（不足补0）
-            return String.format("INV%s-%03d", today, serial);
+
+            // 生成序号后，再次校验数据库是否已存在（双重保险）
+            int serial;
+            String invoiceId;
+            do {
+                serial = dailySerial.getAndIncrement();
+                invoiceId = String.format("INV%s-%03d", today, serial);
+            } while (checkInvoiceIdExists(invoiceId)); // 检查是否已存在
+
+            return invoiceId;
         } finally {
             lock.unlock();
         }
+    }
+
+    // 检查发票ID是否已存在
+    private boolean checkInvoiceIdExists(String invoiceId) {
+        return invoicesMapper.selectById(invoiceId) != null;
     }
 
     @Transactional

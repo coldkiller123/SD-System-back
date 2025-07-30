@@ -8,15 +8,35 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("activity_logs") // 数据库表名
+@TableName("activity_logs") // 与数据库表名保持一致
 public class ActivityLog {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.AUTO) // 自增主键，与表结构匹配
     private Long id;
 
-    private String title;       // 活动标题（如"新订单创建"）
-    private String description; // 活动描述（如"订单号：ORD202507001 - 刚刚"）
-    private String module;      // 所属模块（如"订单管理"）
-    private String color;       // 颜色标识（如"green"）
-    @TableField("create_time")
-    private LocalDateTime createTime; // 活动发生时间
+    @TableField("titleAct") // 对应表中的titleAct字段
+    private String titleAct;
+
+    @TableField("titleSta") // 对应表中的titleSta字段
+    private String titleSta;
+
+    @TableField("value") // 对应表中的value字段
+    private Integer value;
+
+    @TableField("icon") // 对应表中的icon字段
+    private String icon;
+
+    @TableField("todayNew") // 对应表中的todayNew字段
+    private Integer todayNew;
+
+    @TableField("description") // 对应表中的description字段
+    private String description;
+
+    @TableField("module") // 对应表中的module字段
+    private String module;
+
+    @TableField("color") // 对应表中的color字段
+    private String color;
+
+    @TableField("create_time") // 对应表中的create_time字段
+    private LocalDateTime createTime;
 }

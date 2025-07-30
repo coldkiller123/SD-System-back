@@ -8,27 +8,22 @@ import java.math.BigDecimal;
 public class ActivityListResponseDTO {
     private int code = 200;
     private String message = "success";
-    private ActivityData data; // 包含活动列表和总数
+    private ActivityData data; // 包含活动列表
 
     @Data
     public static class ActivityData {
         private List<ActivityDTO> activities; // 活动列表
-        private Totals totals; // 各实体总数
-    }
-
-    @Data
-    public static class Totals {
-        private long orderCount;      // 订单总数
-        private long customerCount;   // 客户总数
-        private long deliveryCount;   // 发货单总数
-        private long invoiceCount;    // 发票总数
     }
 
     @Data
     public static class ActivityDTO {
-        private String title;
-        private String description;
-        private String module;
-        private String color;
+        private String titleAct;       // 活动标题
+        private String titleSta;       // 总数标题
+        private Integer value;         // 总数
+        private String icon;           // 前端组件
+        private Integer todayNew;      // 今日新增
+        private String description;    // 活动描述
+        private String module;         // 所属模块
+        private String color;          // 颜色标识
     }
 }

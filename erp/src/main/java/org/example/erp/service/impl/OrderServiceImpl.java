@@ -24,6 +24,7 @@ import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 
@@ -53,22 +54,40 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
     @Autowired
     private delivery_order_itemsMapper deliveryOrderItemsMapper;
+    // 订单ID生成相关变量（与发货单逻辑对齐）
+    private String currentYearStr; // 当前年份字符串（YYYY）
+    private AtomicInteger yearlySerial; // 年度流水号（原子类保证线程安全）
+    private final ReentrantLock orderLock = new ReentrantLock(); // 锁对象
+
     /**
-     * 从数据库查询指定年份的最大流水号
-     * @param year 年份（如2025）
-     * @return 最大流水号（无记录则返回0）
+     * 初始化：服务启动时加载当前年份最大流水号
      */
-    private int queryMaxSerialFromDB(int year) {
-        // 构建查询条件：订单ID以"SO+年份"开头（如"SO2025"）
+    @PostConstruct
+    public void initOrderIdGenerator() {
+        String currentYear = getCurrentYearStr();
+        int maxSerial = queryMaxYearlySerial(currentYear);
+        currentYearStr = currentYear;
+        yearlySerial = new AtomicInteger(maxSerial > 0 ? maxSerial : 1);
+    }
+
+    /**
+     * 获取当前年份字符串（YYYY）
+     */
+    private String getCurrentYearStr() {
+        return String.valueOf(Calendar.getInstance().get(Calendar.YEAR));
+    }
+
+    /**
+     * 查询指定年份的最大流水号
+     */
+    private int queryMaxYearlySerial(String year) {
         QueryWrapper<orders> queryWrapper = new QueryWrapper<>();
+        // 订单ID格式：SO202500001，前缀为"SO+年份"
         queryWrapper.likeRight("id", "SO" + year);
-        // 截取流水号部分（ID格式为SO202500015，从第6位开始是流水号）
-        queryWrapper.select("MAX(SUBSTRING(id, 6)) as maxSerial");
+        // 截取流水号部分（从第6位开始："SO2025"是5位）
+        queryWrapper.select("MAX(SUBSTRING(id, 7)) as maxSerial");
 
-        // 执行查询
         List<Map<String, Object>> result = ordersMapper.selectMaps(queryWrapper);
-
-        // 处理查询结果（避免空指针）
         if (result == null || result.isEmpty() || result.get(0) == null) {
             return 0;
         }
@@ -78,27 +97,49 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
             return 0;
         }
 
-        // 将查询结果转换为整数（流水号是数字字符串，如"00015"）
         try {
             return Integer.parseInt(maxSerialObj.toString());
         } catch (NumberFormatException e) {
-            // 异常情况（如ID格式错误）默认返回0
             return 0;
         }
     }
-    // 新增：初始化方法，从数据库加载当年最大流水号
-    @PostConstruct // 服务启动时自动执行
-    public void init() {
-        // 获取当前年份（如2025）
-        Calendar calendar = Calendar.getInstance();
-        currentYear = calendar.get(Calendar.YEAR);
 
-        // 从数据库查询当年已存在的最大流水号
-        int maxSerial = queryMaxSerialFromDB(currentYear);
+    /**
+     * 生成订单ID：SO + 年份（YYYY） + 5位流水号（如SO202500001）
+     */
+    private String generateOrderId() {
+        String currentYear = getCurrentYearStr();
+        orderLock.lock(); // 与发货单保持一致的锁机制
+        try {
+            // 跨年时重置流水号（与跨天逻辑对齐）
+            if (!currentYear.equals(currentYearStr)) {
+                int maxSerial = queryMaxYearlySerial(currentYear);
+                currentYearStr = currentYear;
+                yearlySerial.set(maxSerial > 0 ? maxSerial : 1);
+            }
 
-        // 初始化流水号（若数据库无记录，从1开始）
-        serialNumber = new AtomicInteger(maxSerial > 0 ? maxSerial : 1);
+            // 生成序号后校验是否存在，确保唯一（与发货单逻辑完全一致）
+            int serial;
+            String orderId;
+            do {
+                serial = yearlySerial.getAndIncrement();
+                orderId = String.format("SO%s%05d", currentYear, serial);
+            } while (checkOrderIdExists(orderId)); // 循环检查直到ID不存在
+
+            return orderId;
+        } finally {
+            orderLock.unlock();
+        }
     }
+
+    /**
+     * 检查订单ID是否已存在于数据库（与发货单校验逻辑一致）
+     */
+    private boolean checkOrderIdExists(String orderId) {
+        // 调用mapper查询该ID是否存在
+        return ordersMapper.selectById(orderId) != null;
+    }
+
 
     @Override
     public PageResult<orders> getOrders(OrderQueryParam queryParam) {
@@ -278,32 +319,7 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         return detailDTO;
     }
 
-    /**
-     * 生成订单ID，格式：SO + 年份（YYYY） + 5位流水号（如SO202500015）
-     */
-    private String generateOrderId() {
-        Calendar calendar = Calendar.getInstance();
-        int currentYearNow = calendar.get(Calendar.YEAR);
 
-        // 若跨年份（如从2024到2025），重置流水号
-        if (currentYearNow != currentYear) {
-            // 加锁保证线程安全（避免并发情况下重复初始化）
-            synchronized (this) {
-                if (currentYearNow != currentYear) {
-                    currentYear = currentYearNow;
-                    // 重新查询新年份的最大流水号（通常为0）
-                    int maxSerial = queryMaxSerialFromDB(currentYear);
-                    serialNumber.set(maxSerial > 0 ? maxSerial : 1);
-                }
-            }
-        }
-
-        // 获取当前流水号并自动递增（原子操作，线程安全）
-        int currentSerial = serialNumber.getAndIncrement();
-
-        // 格式化生成订单ID：SO + 年份 + 5位流水号（不足5位补0）
-        return String.format("SO%d%05d", currentYear, currentSerial);
-    }
 
     @Override
     public UnshippedOrderResponseDTO getUnshippedOrders(UnshippedOrderQueryDTO queryDTO) {
