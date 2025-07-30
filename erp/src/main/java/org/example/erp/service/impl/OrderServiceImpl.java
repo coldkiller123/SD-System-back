@@ -170,8 +170,8 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
             order.setCreatedAt(sdf.format(new Date()));
         }
 
-        // 7. 设置是否已开票（根据实付金额判断，这里只是示例逻辑）
-        order.setHasInvoice(orderDTO.getPaidAmount().compareTo(BigDecimal.ZERO) > 0);
+        // 7. 设置未开票
+        order.setHasInvoice(false);
 
         // 8. 保存订单
         baseMapper.insert(order);
@@ -219,7 +219,7 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         // 强制覆盖modifiedAt为当前时间（忽略前端传入值，确保准确性）
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
         existingOrder.setCreatedAt(existingOrder.getCreatedAt()); // 保留原始创建时间
-        existingOrder.setHasInvoice(updateDTO.getPaidAmount().compareTo(BigDecimal.ZERO) > 0); // 同步更新开票状态
+        existingOrder.setHasInvoice(false);
 
         // 5. 保存更新后的订单
         baseMapper.updateById(existingOrder);
@@ -359,106 +359,96 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
     }
 
 
-    //获取已收货订单列表（支持分页和筛选）
+    //获取已完成订单列表（支持分页和筛选）
     @Override
-    public DeliveredOrdersResponse getDeliveredOrders (Integer pageIndex, Integer pageSize, String orderId, String status) {
+    public DeliveredOrdersResponse getDeliveredOrders(Integer pageIndex, Integer pageSize, String orderId, String status) {
         // 1. 处理分页参数默认值
         int defaultPageIndex = 0;
         int defaultPageSize = 10;
         pageIndex = (pageIndex == null || pageIndex < 0) ? defaultPageIndex : pageIndex;
         pageSize = (pageSize == null || pageSize <= 0) ? defaultPageSize : pageSize;
 
-        // 2. 第一步：查询所有已生成交货单的订单 ID（通过发票间接关联）
-        // 2.1 查询所有发票，获取订单 ID 与交货单 ID 的映射
-        List<invoices> allInvoices = invoicesMapper.selectList (null);
-        Map<String, String> orderIdToDeliveryIdMap = allInvoices.stream ()
-                .filter (invoice -> invoice.getDeliveryOrderId () != null && !invoice.getDeliveryOrderId ().isEmpty ())
-                .collect (Collectors.toMap (
-                        invoices::getOrderId, //key: 订单 ID
-                        invoices::getDeliveryOrderId, //value: 交货单 ID
-                        (existing, replacement) -> existing // 若有重复订单 ID，保留第一个
-                ));
-        Set<String> deliveredOrderIds = orderIdToDeliveryIdMap.keySet (); // 已收货的订单 ID 集合
-
-        // 3. 第二步：构建订单查询条件（只查已收货的订单）
+        // 2. 核心查询条件：status为"已完成"
         QueryWrapper<orders> queryWrapper = new QueryWrapper<>();
-        queryWrapper.in ("id", deliveredOrderIds); // 只包含已收货的订单 ID
+        queryWrapper.eq("status", "已完成");
 
-        // 3.1 订单编号模糊搜索
-        if (orderId != null && !orderId.trim ().isEmpty ()) {
-            queryWrapper.like ("id", orderId.trim ());
+        // 3. 订单编号模糊搜索
+        if (orderId != null && !orderId.trim().isEmpty()) {
+            queryWrapper.like("id", orderId.trim());
         }
 
         // 4. 执行分页查询
-        Page<orders> page = new Page<>(pageIndex + 1, pageSize); // MyBatis-Plus 页码从 1 开始
+        Page<orders> page = new Page<>(pageIndex + 1, pageSize);
         IPage<orders> orderPage = ordersMapper.selectPage(page, queryWrapper);
         List<orders> orderList = orderPage.getRecords();
         long total = orderPage.getTotal();
 
-        // 5. 第三步：处理状态筛选（已开票 / 待开票）
-        // 5.1 先获取所有已开票的订单 ID
-        Set<String> invoicedOrderIds = allInvoices.stream()
-                .map(invoices::getOrderId)
-                .collect(Collectors.toSet());
+        // 5. 关联发货单（保持不变）
+        List<delivery_order_items> deliveryItems = deliveryOrderItemsMapper.selectList(null);
+        Map<String, String> orderIdToDeliveryIdMap = deliveryItems.stream()
+                .filter(item -> item.getOrderId() != null && !item.getOrderId().isEmpty())
+                .collect(Collectors.toMap(
+                        delivery_order_items::getOrderId,
+                        delivery_order_items::getDeliveryOrderId,
+                        (existing, replacement) -> existing
+                ));
 
-        // 5.2 筛选订单
-        List<orders> filteredOrders = orderList.stream ()
-                .filter (order -> {
-                    boolean hasInvoice = invoicedOrderIds.contains (order.getId ());
-                    // 根据 status 筛选
-                    if ("invoiced".equals (status)) {
-                        return hasInvoice;
-                    } else if ("pending".equals (status)) {
-                        return !hasInvoice;
-                    } else { // 默认 all
-                        return true;
-                    }
-                })
-                .collect (Collectors.toList ());
+        List<delivery_orders> allDeliveries = deliveryOrdersMapper.selectList(null);
+        Map<String, delivery_orders> deliveryIdToDeliveryMap = allDeliveries.stream()
+                .collect(Collectors.toMap(
+                        delivery_orders::getId,
+                        delivery -> delivery,
+                        (existing, replacement) -> existing
+                ));
 
-        // 6. 第四步：补充交货日期（从交货单表查询）
-        List<DeliveredOrdersResponse.OrderItem> orderItems = filteredOrders.stream ()
-                .map (order -> {
-                    DeliveredOrdersResponse.OrderItem item = new DeliveredOrdersResponse.OrderItem ();
-                    item.setId (order.getId ());
-                    item.setCustomerId (order.getCustomerId ());
-                    item.setCustomerName (order.getCustomerName ());
-                    item.setAmount (order.getTotalAmount ());
-                    item.setOrderDate (order.getCreatedAt ()); // 订单日期
+        // 新增：查询发票并建立订单ID→发票的映射
+        List<invoices> allInvoices = invoicesMapper.selectList(null);
+        Map<String, invoices> orderIdToInvoiceMap = allInvoices.stream()
+                .filter(invoice -> invoice.getOrderId() != null && !invoice.getOrderId().isEmpty())
+                .collect(Collectors.toMap(
+                        invoices::getOrderId,
+                        invoice -> invoice,
+                        (existing, replacement) -> existing
+                ));
 
-                    // 通过订单 ID→发票→交货单 ID→交货单，获取交货日期
-                    String deliveryOrderId = orderIdToDeliveryIdMap.get (order.getId ());
+        // 6. 构建响应数据（修改后）
+        List<DeliveredOrdersResponse.OrderItem> orderItems = orderList.stream()
+                .map(order -> {
+                    DeliveredOrdersResponse.OrderItem item = new DeliveredOrdersResponse.OrderItem();
+                    item.setId(order.getId());
+                    item.setCustomerId(order.getCustomerId());
+                    item.setCustomerName(order.getCustomerName());
+                    item.setAmount(order.getTotalAmount());
+                    item.setOrderDate(order.getCreatedAt());
+                    item.setStatus("已完成");
+                    item.setHasInvoice(order.isHasInvoice());
+
+                    // 补充发货日期
+                    String deliveryOrderId = orderIdToDeliveryIdMap.get(order.getId());
                     if (deliveryOrderId != null) {
-                        delivery_orders deliveryOrder = deliveryOrdersMapper.selectById (deliveryOrderId);
+                        delivery_orders deliveryOrder = deliveryIdToDeliveryMap.get(deliveryOrderId);
                         if (deliveryOrder != null) {
-                            item.setDeliveryDate (deliveryOrder.getDeliveryDate ()); // 收货日期
+                            item.setDeliveryDate(deliveryOrder.getDeliveryDate());
                         }
                     }
 
-                    item.setStatus ("已收货"); // 固定状态
-                    boolean hasInvoice = invoicedOrderIds.contains (order.getId ());
-                    item.setHasInvoice (hasInvoice);
-
-                    // 设置发票 ID
-                    if (hasInvoice) {
-                        invoices invoice = allInvoices.stream ()
-                                .filter (iv -> order.getId ().equals (iv.getOrderId ()))
-                                .findFirst ()
-                                .orElse (null);
-                        item.setInvoiceId (invoice != null ? invoice.getInvoiceId () : null);
+                    // 动态设置invoiceId（关键修改）
+                    if (order.isHasInvoice()) {
+                        invoices matchedInvoice = orderIdToInvoiceMap.get(order.getId());
+                        item.setInvoiceId(matchedInvoice != null ? matchedInvoice.getInvoiceId() : null);
                     } else {
-                        item.setInvoiceId (null);
+                        item.setInvoiceId(null);
                     }
 
                     return item;
                 })
                 .collect(Collectors.toList());
 
-        // 7. 构建响应结果
-        DeliveredOrdersResponse response = new DeliveredOrdersResponse ();
-        response.setData (orderItems);
-        response.setTotal (total);
-        response.setPageCount ((int) Math.ceil ((double) total /pageSize));
+        // 7. 构建最终响应
+        DeliveredOrdersResponse response = new DeliveredOrdersResponse();
+        response.setData(orderItems);
+        response.setTotal(total);
+        response.setPageCount((int) Math.ceil((double) total / pageSize));
 
         return response;
     }

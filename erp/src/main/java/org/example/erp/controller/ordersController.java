@@ -93,7 +93,7 @@ public class ordersController {
         return ResponseEntity.ok(response);
     }
 
-    //获取已收货订单列表（支持分页和筛选）
+    //获取已完成订单列表（支持分页和筛选）
     @GetMapping ("/delivered")
     public DeliveredOrdersResponse getDeliveredOrders (
             @RequestParam (required = false) Integer pageIndex,
