@@ -16,7 +16,7 @@ public class DeliveredOrdersResponse {
         private Number amount; // 订单金额
         private String orderDate; // 订单日期（ISO 格式）
         private String deliveryDate; // 收货日期（ISO 格式）
-        private String status; // 订单状态（固定为 "已收货"）
+        private String status; // 订单状态（固定为 "已完成"）
         private boolean hasInvoice; // 是否已开票
         private String invoiceId; // 发票 ID（null 表示未开票）
     }
