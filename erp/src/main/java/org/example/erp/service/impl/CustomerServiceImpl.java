@@ -8,6 +8,7 @@ import org.example.erp.dto.CustomerUpdateRequest;
 import org.example.erp.dto.CustomerListResponse;
 import org.example.erp.dto.FileUploadResponse;
 import org.example.erp.dto.CustomerDetailResponse;
+import org.example.erp.dto.CustomerSearchDTO;
 
 import org.example.erp.entity.attachments;
 import org.example.erp.entity.contacts;
@@ -50,6 +51,31 @@ public class CustomerServiceImpl implements CustomerService {
     // 从配置文件读取上传根路径，建议在application.properties中配置
     @Value("${file.upload.base-path:/uploads}")
     private String baseUploadPath;
+
+    //查询所有满足搜索条件客户
+    @Override
+    public List<CustomerSearchDTO> searchCustomers(String keyword) {
+        // 1. 构建查询条件
+        QueryWrapper<customers> queryWrapper = new QueryWrapper<>();
+
+        // 2. 关键词不为空时，添加模糊查询条件（匹配ID或姓名）
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String trimKeyword = keyword.trim();
+            queryWrapper.and(wrapper ->
+                    wrapper.like("id", trimKeyword)  // 匹配客户ID
+                            .or()
+                            .like("name", trimKeyword)  // 匹配客户姓名
+            );
+        }
+
+        // 3. 执行查询（无关键词时返回所有客户）
+        List<customers> customerList = customersMapper.selectList(queryWrapper);
+
+        // 4. 转换为DTO（只返回ID和姓名，避免暴露多余字段）
+        return customerList.stream()
+                .map(customer -> new CustomerSearchDTO(customer.getId(), customer.getName()))
+                .collect(Collectors.toList());
+    }
 
     @Transactional
     @Override
@@ -256,12 +282,12 @@ public class CustomerServiceImpl implements CustomerService {
         }
 
         // 按地区筛选
-        if (region != null && !region.trim().isEmpty()) {
+        if (region != null && !region.trim().isEmpty()&&!"all".equals(region.trim())) {
             queryWrapper.eq("region", region.trim());
         }
 
         // 按行业筛选
-        if (industry != null && !industry.trim().isEmpty()) {
+        if (industry != null && !industry.trim().isEmpty()&&!"all".equals(industry.trim())) {
             queryWrapper.eq("industry", industry.trim());
         }
 
