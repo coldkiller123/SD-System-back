@@ -22,7 +22,9 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -55,44 +57,59 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
         LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
         long todayNewOrders = getTodayNewCount(ordersMapper, orders::getCreatedAt, todayStart);
         long todayNewCustomers = getTodayNewCount(customersMapper, customers::getCreatedAt, todayStart);
-        long todayNewDeliveries = getTodayNewCount(deliveryOrdersMapper, delivery_orders::getDeliveryDate, todayStart); // 假设用deliveryDate
+        long todayNewDeliveries = getTodayNewCount(deliveryOrdersMapper, delivery_orders::getDeliveryDate, todayStart);
         long todayNewInvoices = getTodayNewCount(invoicesMapper, invoices::getIssueDate, todayStart);
 
-        // 3. 查询最新30条活动日志
+        // 3. 查询所有相关模块的活动日志（只关注我们需要的四类）
         LambdaQueryWrapper<ActivityLog> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.orderByDesc(ActivityLog::getCreateTime).last("LIMIT 30");
+        queryWrapper.in(ActivityLog::getModule, "客户管理", "订单管理", "销售订单", "发货管理", "财务管理")
+                .orderByDesc(ActivityLog::getCreateTime);
         List<ActivityLog> logs = activityLogMapper.selectList(queryWrapper);
 
-        // 4. 转换活动日志为DTO（合并统计信息，匹配前端字段）
-        List<ActivityListResponseDTO.ActivityDTO> activityDTOs = logs.stream().map(log -> {
-            ActivityListResponseDTO.ActivityDTO dto = new ActivityListResponseDTO.ActivityDTO();
+        // 4. 按模块分组，只保留每个模块最新的一条记录
+        Map<String, ActivityLog> latestLogs = new HashMap<>();
+        for (ActivityLog log : logs) {
+            String module = log.getModule();
+            // 对于"销售订单"，统一归到"订单管理"组
+            String groupKey = "销售订单".equals(module) ? "订单管理" : module;
 
-            // 核心：设置双标题、图标，与前端一一对应
-            switch (log.getModule()) {
+            // 如果该组还没有记录，或者有更新的记录，则替换
+            if (!latestLogs.containsKey(groupKey)) {
+                latestLogs.put(groupKey, log);
+            }
+        }
+
+        // 5. 转换为DTO列表
+        List<ActivityListResponseDTO.ActivityDTO> activityDTOs = latestLogs.values().stream().map(log -> {
+            ActivityListResponseDTO.ActivityDTO dto = new ActivityListResponseDTO.ActivityDTO();
+            String module = log.getModule();
+            String groupKey = "销售订单".equals(module) ? "订单管理" : module;
+
+            // 设置各模块对应的统计信息
+            switch (groupKey) {
                 case "客户管理":
-                    dto.setTitleAct(log.getTitleAct()); // 活动标题（如"新客户注册"）
-                    dto.setTitleSta("客户总数");       // 统计标题（对应stats的title）
-                    dto.setIcon("Users");              // 对应图标
+                    dto.setTitleAct(log.getTitleAct());
+                    dto.setTitleSta("客户总数");
+                    dto.setIcon("Users");
                     dto.setValue((int) customerCount);
                     dto.setTodayNew((int) todayNewCustomers);
                     break;
                 case "订单管理":
-                case "销售订单": // 兼容模块名
-                    dto.setTitleAct(log.getTitleAct()); // 如"新订单创建"
+                    dto.setTitleAct(log.getTitleAct());
                     dto.setTitleSta("订单总数");
                     dto.setIcon("FileText");
                     dto.setValue((int) orderCount);
                     dto.setTodayNew((int) todayNewOrders);
                     break;
                 case "发货管理":
-                    dto.setTitleAct(log.getTitleAct()); // 如"发货单生成"
+                    dto.setTitleAct(log.getTitleAct());
                     dto.setTitleSta("发货单总数");
                     dto.setIcon("Package");
                     dto.setValue((int) deliveryCount);
                     dto.setTodayNew((int) todayNewDeliveries);
                     break;
                 case "财务管理":
-                    dto.setTitleAct(log.getTitleAct()); // 如"发票开具"
+                    dto.setTitleAct(log.getTitleAct());
                     dto.setTitleSta("发票总数");
                     dto.setIcon("Receipt");
                     dto.setValue((int) invoiceCount);
@@ -106,7 +123,6 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
                     dto.setTodayNew(0);
             }
 
-            // 保留描述和时间差（如"上海科技有限公司 - 2分钟前"）
             dto.setDescription(log.getDescription() + " - " + formatTimeDifference(log.getCreateTime()));
             dto.setModule(log.getModule());
             dto.setColor(log.getColor());
@@ -114,7 +130,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
             return dto;
         }).collect(Collectors.toList());
 
-        // 5. 构建响应（仅包含合并后的activity列表）
+        // 6. 构建响应
         ActivityListResponseDTO response = new ActivityListResponseDTO();
         ActivityListResponseDTO.ActivityData data = new ActivityListResponseDTO.ActivityData();
         data.setActivities(activityDTOs);
@@ -123,7 +139,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
         return response;
     }
 
-    // 抽取通用方法：计算今日新增数量（简化代码）
+    // 抽取通用方法：计算今日新增数量
     private <T> long getTodayNewCount(
             BaseMapper<T> mapper,
             SFunction<T, ?> timeField,
@@ -143,7 +159,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
         log.setColor(color);
         log.setCreateTime(LocalDateTime.now());
 
-        // 按模块设置默认icon（与前端对应）
+        // 按模块设置默认icon
         switch (module) {
             case "客户管理":
                 log.setIcon("Users");
@@ -159,14 +175,14 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
                 log.setIcon("Receipt");
                 break;
             default:
-                log.setIcon(""); // 默认空字符串（避免null）
+                log.setIcon("");
         }
 
         activityLogMapper.insert(log);
     }
 
     /**
-     * 格式化时间差（如：刚刚、2分钟前、1小时前）
+     * 格式化时间差
      */
     private String formatTimeDifference(LocalDateTime createTime) {
         LocalDateTime now = LocalDateTime.now();

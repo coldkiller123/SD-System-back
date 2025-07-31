@@ -137,6 +137,10 @@ public class InvoiceServiceImpl implements InvoiceService {
         if (order == null) {
             throw new RuntimeException("订单不存在: " + orderId);
         }
+        // 新增校验：判断是否已开具发票
+        if (order.isHasInvoice()) {  // 直接判断hasInvoice字段（假设该字段为boolean类型）
+            throw new RuntimeException("订单" + orderId + "已开具发票，不可重复开具");
+        }
         // 校验订单状态是否为“已完成”
         if (!"已完成".equals(order.getStatus())) {
             throw new RuntimeException("订单" + orderId + "状态不是“已完成”，无法生成发票");

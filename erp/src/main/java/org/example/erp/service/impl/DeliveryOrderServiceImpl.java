@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -109,13 +110,13 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
                 dailySerial.set(maxSerial > 0 ? maxSerial : 1);
             }
 
-            // 生成序号后校验是否存在，确保唯一（核心修改）
+            // 生成序号后校验是否存在，确保唯一
             int serial;
             String deliveryOrderId;
             do {
                 serial = dailySerial.getAndIncrement();
                 deliveryOrderId = String.format("DEL%s-%03d", today, serial);
-            } while (checkDeliveryOrderIdExists(deliveryOrderId)); // 循环检查直到ID不存在
+            } while (checkDeliveryOrderIdExists(deliveryOrderId));
 
             return deliveryOrderId;
         } finally {
@@ -127,16 +128,16 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
      * 检查发货单号是否已存在于数据库
      */
     private boolean checkDeliveryOrderIdExists(String deliveryOrderId) {
-        // 调用mapper查询该ID是否存在
         return deliveryOrdersMapper.selectById(deliveryOrderId) != null;
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class) // 事务管理：任何异常回滚
+    @Transactional(rollbackFor = Exception.class)
     public DeliveryOrderResponseDTO createDeliveryOrder(DeliveryOrderCreateDTO createDTO) {
         try {
-            // 1. 校验订单是否存在且状态为“已付款”
             List<String> orderIds = createDTO.getOrder_ids();
+
+            // 1. 校验所有订单是否存在且状态为“已付款”
             for (String orderId : orderIds) {
                 orders order = ordersMapper.selectById(orderId);
                 if (order == null) {
@@ -147,68 +148,74 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
                 }
             }
 
-            // 2. 校验库存是否充足（按商品维度汇总需发货数量）
+            // 2. 按商品维度汇总所有订单的需求量（核心修改）
+            Map<String, BigDecimal> productTotalQuantity = new HashMap<>();
             for (String orderId : orderIds) {
                 orders order = ordersMapper.selectById(orderId);
                 String productId = order.getProductId();
-                BigDecimal requiredQuantity = order.getQuantity(); // 该订单需发货数量
+                BigDecimal quantity = order.getQuantity();
 
-                // 查询商品当前库存
-                LambdaQueryWrapper<products> productQuery = new LambdaQueryWrapper<>();
-                productQuery.eq(products::getId, productId);
-                products product = productsMapper.selectOne(productQuery);
+                // 累加同一商品的总需求量
+                productTotalQuantity.put(
+                        productId,
+                        productTotalQuantity.getOrDefault(productId, BigDecimal.ZERO).add(quantity)
+                );
+            }
+
+            // 3. 校验库存是否充足（使用汇总后的需求量）
+            for (Map.Entry<String, BigDecimal> entry : productTotalQuantity.entrySet()) {
+                String productId = entry.getKey();
+                BigDecimal totalRequired = entry.getValue(); // 同一商品的总需求量
+
+                // 查询商品库存
+                products product = productsMapper.selectById(productId);
                 if (product == null) {
                     return DeliveryOrderResponseDTO.fail("商品不存在：" + productId, 400);
                 }
 
-                BigDecimal stockQuantity = product.getQuantity(); // 当前库存
-                if (stockQuantity.compareTo(requiredQuantity) < 0) {
-                    // 库存不足
+                BigDecimal stockQuantity = product.getQuantity();
+                if (stockQuantity.compareTo(totalRequired) < 0) {
                     return DeliveryOrderResponseDTO.fail(
-                            "商品" + product.getName() + "库存不足（当前：" + stockQuantity + "，需：" + requiredQuantity + "）",
+                            "商品" + product.getName() + "库存不足（当前：" + stockQuantity + "，需：" + totalRequired + "）",
                             400
                     );
                 }
             }
 
-            // 3. 生成发货单号（关键修改：先生成ID）
+            // 4. 生成发货单并保存
             String deliveryOrderId = generateDeliveryOrderId();
-
-            // 创建发货单主表记录（关键修改：设置自定义ID）
             delivery_orders deliveryOrder = new delivery_orders();
-            deliveryOrder.setId(deliveryOrderId); // 设置生成的发货单号作为主表ID
+            deliveryOrder.setId(deliveryOrderId);
             deliveryOrder.setDeliveryDate(createDTO.getDeliveryDate());
             deliveryOrder.setWarehouseManager(createDTO.getWarehouseManager());
             deliveryOrder.setRemarks(createDTO.getRemarks());
-            deliveryOrdersMapper.insert(deliveryOrder); // 插入主表
+            deliveryOrdersMapper.insert(deliveryOrder);
 
-            // 4. 创建发货单明细表记录（关联订单与发货单）
+            // 5. 创建明细记录
             for (String orderId : orderIds) {
                 delivery_order_items item = new delivery_order_items();
-                item.setDeliveryOrderId(deliveryOrderId); // 直接使用生成的ID关联
-                item.setOrderId(orderId); // 关联订单
+                item.setDeliveryOrderId(deliveryOrderId);
+                item.setOrderId(orderId);
                 deliveryOrderItemsMapper.insert(item);
             }
 
-            // 5. 扣减库存（按订单商品扣减）
-            for (String orderId : orderIds) {
-                orders order = ordersMapper.selectById(orderId);
-                String productId = order.getProductId();
-                BigDecimal requiredQuantity = order.getQuantity();
+            // 6. 扣减库存
+            for (Map.Entry<String, BigDecimal> entry : productTotalQuantity.entrySet()) {
+                String productId = entry.getKey();
+                BigDecimal totalRequired = entry.getValue();
 
-                // 查询商品并扣减库存
                 products product = productsMapper.selectById(productId);
-                BigDecimal newStock = product.getQuantity().subtract(requiredQuantity);
-                product.setQuantity(newStock);
+                product.setQuantity(product.getQuantity().subtract(totalRequired));
                 productsMapper.updateById(product);
             }
 
-            // 6. 更新订单状态为“已发货”
+            // 7. 更新订单状态
             for (String orderId : orderIds) {
                 orders order = ordersMapper.selectById(orderId);
                 order.setStatus("已发货");
                 ordersMapper.updateById(order);
             }
+
             // 记录活动日志
             ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
             activityService.recordActivity(
@@ -218,11 +225,9 @@ public class DeliveryOrderServiceImpl extends ServiceImpl<delivery_ordersMapper,
                     "orange"
             );
 
-            // 7. 返回成功响应（发货单ID）
             return DeliveryOrderResponseDTO.success(deliveryOrderId);
 
         } catch (Exception e) {
-            // 捕获异常并返回服务器错误
             return DeliveryOrderResponseDTO.fail("服务器内部错误：" + e.getMessage(), 500);
         }
     }
