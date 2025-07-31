@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, ActivityLog> implements ActivityService {
@@ -60,9 +59,9 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
         long todayNewDeliveries = getTodayNewCount(deliveryOrdersMapper, delivery_orders::getDeliveryDate, todayStart);
         long todayNewInvoices = getTodayNewCount(invoicesMapper, invoices::getIssueDate, todayStart);
 
-        // 3. 查询所有相关模块的活动日志（只关注我们需要的四类）
+        // 3. 查询所有相关模块的活动日志（只关注四个模块，移除销售订单）
         LambdaQueryWrapper<ActivityLog> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.in(ActivityLog::getModule, "客户管理", "订单管理", "销售订单", "发货管理", "财务管理")
+        queryWrapper.in(ActivityLog::getModule, "客户管理", "订单管理", "发货管理", "财务管理")
                 .orderByDesc(ActivityLog::getCreateTime);
         List<ActivityLog> logs = activityLogMapper.selectList(queryWrapper);
 
@@ -70,73 +69,100 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
         Map<String, ActivityLog> latestLogs = new HashMap<>();
         for (ActivityLog log : logs) {
             String module = log.getModule();
-            // 对于"销售订单"，统一归到"订单管理"组
-            String groupKey = "销售订单".equals(module) ? "订单管理" : module;
-
-            // 如果该组还没有记录，或者有更新的记录，则替换
-            if (!latestLogs.containsKey(groupKey)) {
-                latestLogs.put(groupKey, log);
+            // 只处理四个指定模块，不涉及销售订单
+            if ("客户管理".equals(module) || "订单管理".equals(module) ||
+                    "发货管理".equals(module) || "财务管理".equals(module)) {
+                if (!latestLogs.containsKey(module)) {
+                    latestLogs.put(module, log);
+                }
             }
         }
 
-        // 5. 转换为DTO列表
-        List<ActivityListResponseDTO.ActivityDTO> activityDTOs = latestLogs.values().stream().map(log -> {
-            ActivityListResponseDTO.ActivityDTO dto = new ActivityListResponseDTO.ActivityDTO();
-            String module = log.getModule();
-            String groupKey = "销售订单".equals(module) ? "订单管理" : module;
+        // 5. 转换为DTO列表（按固定顺序：客户管理→订单管理→发货管理→财务管理）
+        List<ActivityListResponseDTO.ActivityDTO> activityDTOs = new ArrayList<>();
 
-            // 设置各模块对应的统计信息
-            switch (groupKey) {
-                case "客户管理":
-                    dto.setTitleAct(log.getTitleAct());
-                    dto.setTitleSta("客户总数");
-                    dto.setIcon("Users");
-                    dto.setValue((int) customerCount);
-                    dto.setTodayNew((int) todayNewCustomers);
-                    break;
-                case "订单管理":
-                    dto.setTitleAct(log.getTitleAct());
-                    dto.setTitleSta("订单总数");
-                    dto.setIcon("FileText");
-                    dto.setValue((int) orderCount);
-                    dto.setTodayNew((int) todayNewOrders);
-                    break;
-                case "发货管理":
-                    dto.setTitleAct(log.getTitleAct());
-                    dto.setTitleSta("发货单总数");
-                    dto.setIcon("Package");
-                    dto.setValue((int) deliveryCount);
-                    dto.setTodayNew((int) todayNewDeliveries);
-                    break;
-                case "财务管理":
-                    dto.setTitleAct(log.getTitleAct());
-                    dto.setTitleSta("发票总数");
-                    dto.setIcon("Receipt");
-                    dto.setValue((int) invoiceCount);
-                    dto.setTodayNew((int) todayNewInvoices);
-                    break;
-                default:
-                    dto.setTitleAct(log.getTitleAct());
-                    dto.setTitleSta("其他");
-                    dto.setIcon("");
-                    dto.setValue(0);
-                    dto.setTodayNew(0);
-            }
+        // 客户管理
+        activityDTOs.add(buildActivityDTO(
+                latestLogs.get("客户管理"),
+                "客户管理",
+                "客户总数",
+                "Users",
+                "blue",
+                customerCount,
+                todayNewCustomers
+        ));
 
-            dto.setDescription(log.getDescription() + " - " + formatTimeDifference(log.getCreateTime()));
-            dto.setModule(log.getModule());
-            dto.setColor(log.getColor());
+        // 订单管理（只保留订单管理，无销售订单）
+        activityDTOs.add(buildActivityDTO(
+                latestLogs.get("订单管理"),
+                "订单管理",
+                "订单总数",
+                "FileText",
+                "green",
+                orderCount,
+                todayNewOrders
+        ));
 
-            return dto;
-        }).collect(Collectors.toList());
+        // 发货管理
+        activityDTOs.add(buildActivityDTO(
+                latestLogs.get("发货管理"),
+                "发货管理",
+                "发货单总数",
+                "Package",
+                "purple",
+                deliveryCount,
+                todayNewDeliveries
+        ));
+
+        // 财务管理
+        activityDTOs.add(buildActivityDTO(
+                latestLogs.get("财务管理"),
+                "财务管理",
+                "发票总数",
+                "Receipt",
+                "red",
+                invoiceCount,
+                todayNewInvoices
+        ));
 
         // 6. 构建响应
         ActivityListResponseDTO response = new ActivityListResponseDTO();
         ActivityListResponseDTO.ActivityData data = new ActivityListResponseDTO.ActivityData();
         data.setActivities(activityDTOs);
         response.setData(data);
+        response.setCode(200);
+        response.setMessage("success");
 
         return response;
+    }
+
+    // 构建单个活动DTO的工具方法
+    private ActivityListResponseDTO.ActivityDTO buildActivityDTO(
+            ActivityLog log,
+            String module,
+            String titleSta,
+            String icon,
+            String color,
+            long totalValue,
+            long todayNew) {
+
+        ActivityListResponseDTO.ActivityDTO dto = new ActivityListResponseDTO.ActivityDTO();
+        dto.setModule(module);
+        dto.setTitleSta(titleSta);
+        dto.setIcon(icon);
+        dto.setColor(color);
+        dto.setValue((int) totalValue);
+        dto.setTodayNew((int) todayNew);
+
+        if (log != null) {
+            dto.setTitleAct(log.getTitleAct());
+            dto.setDescription(log.getDescription() + " - " + formatTimeDifference(log.getCreateTime()));
+        } else {
+            dto.setTitleAct("无新增");
+            dto.setDescription("无新增记录");
+        }
+
+        return dto;
     }
 
     // 抽取通用方法：计算今日新增数量
@@ -159,13 +185,12 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
         log.setColor(color);
         log.setCreateTime(LocalDateTime.now());
 
-        // 按模块设置默认icon
+        // 按模块设置默认icon（只处理四个模块）
         switch (module) {
             case "客户管理":
                 log.setIcon("Users");
                 break;
             case "订单管理":
-            case "销售订单":
                 log.setIcon("FileText");
                 break;
             case "发货管理":
