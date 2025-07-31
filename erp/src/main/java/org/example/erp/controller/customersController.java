@@ -5,14 +5,20 @@ import org.example.erp.dto.CustomerUpdateRequest;
 import org.example.erp.dto.CustomerListResponse;
 import org.example.erp.dto.FileUploadResponse;
 import org.example.erp.dto.CustomerDetailResponse;
+import org.example.erp.dto.CustomerSearchDTO;
 
 import org.example.erp.service.CustomerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/customer")
@@ -20,6 +26,14 @@ public class customersController {
 
     @Autowired
     private CustomerService customerService;
+
+    //客户搜索接口
+    @GetMapping("/customers")
+    public List<CustomerSearchDTO> searchCustomers(
+            @RequestParam(required = false) String keyword
+    ) {
+        return customerService.searchCustomers(keyword);
+    }
 
     // 已有更新接口
     @PutMapping("/update")
