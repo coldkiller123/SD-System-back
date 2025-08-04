@@ -152,7 +152,7 @@ public class ActivityServiceImpl extends ServiceImpl<ActivityLogMapper, Activity
         dto.setIcon(icon);
         dto.setColor(color);
         dto.setValue((int) totalValue);
-        dto.setTodayNew((int) todayNew);
+        dto.setTodayNew("今日新增 + " + todayNew);
 
         if (log != null) {
             dto.setTitleAct(log.getTitleAct());
