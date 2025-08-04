@@ -21,7 +21,7 @@ public class ActivityListResponseDTO {
         private String titleSta;       // 总数标题
         private Integer value;         // 总数
         private String icon;           // 前端组件
-        private Integer todayNew;      // 今日新增
+        private String todayNew;      // 今日新增
         private String description;    // 活动描述
         private String module;         // 所属模块
         private String color;          // 颜色标识
