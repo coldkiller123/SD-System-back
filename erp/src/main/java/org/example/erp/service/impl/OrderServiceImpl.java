@@ -377,7 +377,7 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
     //获取已完成订单列表（支持分页和筛选）
     @Override
-    public DeliveredOrdersResponse getDeliveredOrders(Integer pageIndex, Integer pageSize, String orderId, String status) {
+    public DeliveredOrdersResponse getDeliveredOrders(Integer pageIndex, Integer pageSize, String orderId, String status,Boolean hasInvoice) {
         // 1. 处理分页参数默认值
         int defaultPageIndex = 0;
         int defaultPageSize = 10;
@@ -391,6 +391,10 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
         // 3. 订单编号模糊搜索
         if (orderId != null && !orderId.trim().isEmpty()) {
             queryWrapper.like("id", orderId.trim());
+        }
+        if (hasInvoice != null) {
+            // 如果hasInvoice为true，筛选出有发票的订单；为false则筛选无发票的订单
+            queryWrapper.eq("hasInvoice", hasInvoice);
         }
 
         // 4. 执行分页查询
