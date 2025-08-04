@@ -99,8 +99,9 @@ public class ordersController {
             @RequestParam (required = false) Integer pageIndex,
             @RequestParam (required = false) Integer pageSize,
             @RequestParam (required = false) String orderId,
-            @RequestParam (required = false, defaultValue = "all") String status) {
-        return orderService.getDeliveredOrders (pageIndex, pageSize, orderId, status);
+            @RequestParam (required = false) Boolean hasInvoice,
+            @RequestParam (required = false) String status) {
+        return orderService.getDeliveredOrders (pageIndex, pageSize, orderId, status, hasInvoice);
     }
 
     // 获取状态为已发货&已完成的订单列表

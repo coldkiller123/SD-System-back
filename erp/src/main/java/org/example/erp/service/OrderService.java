@@ -15,7 +15,7 @@ public interface OrderService extends IService<orders> {
     UnshippedOrderResponseDTO getUnshippedOrders(UnshippedOrderQueryDTO queryDTO);
 
     //查询已收货订单列表（支持分页和筛选）
-    DeliveredOrdersResponse getDeliveredOrders (Integer pageIndex, Integer pageSize, String orderId, String status);
+    DeliveredOrdersResponse getDeliveredOrders (Integer pageIndex, Integer pageSize, String orderId, String status, Boolean hasInvoice);
 
     // 获取状态为已发货&已完成的订单列表
     OrderPageResponseDTO getInprocessOrders(String status, int page, int pageSize, String search);
