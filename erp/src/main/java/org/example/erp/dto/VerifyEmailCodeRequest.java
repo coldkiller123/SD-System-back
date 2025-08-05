@@ -13,5 +13,9 @@ public class VerifyEmailCodeRequest {
     @NotBlank(message = "验证码不能为空")
     private String code;  // 用户输入的验证码
 
-    private String username;  // 关联的用户名（可选）
+    @NotBlank(message = "用户名不能为空")
+    private String username;  // 关联的用户名
+
+    @NotBlank(message = "请求ID不能为空")
+    private String requestId;  // 发送验证码时返回的requestId
 }
