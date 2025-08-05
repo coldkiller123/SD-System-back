@@ -12,4 +12,7 @@ public class SendEmailCodeRequest {
 
     @NotBlank(message = "用户名不能为空")
     private String username;  // 关联的用户名
+
+    @NotBlank(message = "验证码类型不能为空")
+    private String type;  // 验证码类型，如：forgot_password
 }
