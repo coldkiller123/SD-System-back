@@ -3,9 +3,8 @@ package org.example.erp.dto;
 public class OrderQueryParam {
     private Integer pageIndex = 0; // 当前页码（从0开始）
     private Integer pageSize = 10; // 每页数量，默认10
-    private String orderId;       // 按订单编号模糊搜索
-    private String customerName;  // 按客户名称模糊搜索
-    private String status;        // 订单状态
+    private String search;         // 综合搜索：订单编号、客户名称等
+    private String status;         // 订单状态
 
     // Getters and Setters
     public Integer getPageIndex() {
@@ -24,20 +23,12 @@ public class OrderQueryParam {
         this.pageSize = pageSize;
     }
 
-    public String getOrderId() {
-        return orderId;
+    public String getSearch() {
+        return search;
     }
 
-    public void setOrderId(String orderId) {
-        this.orderId = orderId;
-    }
-
-    public String getCustomerName() {
-        return customerName;
-    }
-
-    public void setCustomerName(String customerName) {
-        this.customerName = customerName;
+    public void setSearch(String search) {
+        this.search = search;
     }
 
     public String getStatus() {

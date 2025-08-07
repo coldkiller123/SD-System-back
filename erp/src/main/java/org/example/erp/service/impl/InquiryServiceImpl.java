@@ -22,6 +22,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.Calendar;
 import java.util.List;
@@ -153,16 +154,22 @@ public class InquiryServiceImpl extends ServiceImpl<inquiriesMapper, inquiries> 
     // 分页查询和状态更新方法保持不变
     @Override
     public InquiryPageResult getInquiries(InquiryQueryParam queryParam) {
+        // 注意：PageHelper分页插件通常从1开始计数，所以需要+1
         Page<inquiries> page = new Page<>(queryParam.getPageIndex() + 1, queryParam.getPageSize());
         LambdaQueryWrapper<inquiries> queryWrapper = new LambdaQueryWrapper<>();
 
-        if (queryParam.getInquiryId() != null && !queryParam.getInquiryId().isEmpty()) {
-            queryWrapper.like(inquiries::getInquiryId, queryParam.getInquiryId());
+        // 综合搜索：同时匹配询价单号和客户名称
+        if (StringUtils.hasText(queryParam.getSearch())) {
+            String searchTerm = queryParam.getSearch();
+            queryWrapper.and(wrapper -> wrapper
+                    .like(inquiries::getInquiryId, searchTerm)
+                    .or()
+                    .like(inquiries::getCustomerName, searchTerm)
+            );
         }
-        if (queryParam.getCustomerName() != null && !queryParam.getCustomerName().isEmpty()) {
-            queryWrapper.like(inquiries::getCustomerName, queryParam.getCustomerName());
-        }
-        if (queryParam.getStatus() != null && !queryParam.getStatus().isEmpty()) {
+
+        // 状态筛选
+        if (StringUtils.hasText(queryParam.getStatus())) {
             queryWrapper.eq(inquiries::getStatus, queryParam.getStatus());
         }
 
