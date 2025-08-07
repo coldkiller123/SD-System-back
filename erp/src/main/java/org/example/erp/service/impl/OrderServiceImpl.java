@@ -143,23 +143,27 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
     @Override
     public PageResult<orders> getOrders(OrderQueryParam queryParam) {
-        // 已有的分页查询逻辑保持不变
         LambdaQueryWrapper<orders> queryWrapper = new LambdaQueryWrapper<>();
 
-        if (StringUtils.hasText(queryParam.getOrderId())) {
-            queryWrapper.like(orders::getId, queryParam.getOrderId());
+        // 综合搜索：同时匹配订单编号和客户名称
+        if (StringUtils.hasText(queryParam.getSearch())) {
+            String searchTerm = queryParam.getSearch();
+            queryWrapper.and(wrapper -> wrapper
+                    .like(orders::getId, searchTerm)
+                    .or()
+                    .like(orders::getCustomerName, searchTerm)
+            );
         }
 
-        if (StringUtils.hasText(queryParam.getCustomerName())) {
-            queryWrapper.like(orders::getCustomerName, queryParam.getCustomerName());
-        }
-
+        // 订单状态筛选
         if (StringUtils.hasText(queryParam.getStatus())) {
             queryWrapper.eq(orders::getStatus, queryParam.getStatus());
         }
 
+        // 按创建时间降序排序
         queryWrapper.orderByDesc(orders::getCreatedAt);
 
+        // 分页处理
         IPage<orders> page = new Page<>(
                 queryParam.getPageIndex(),
                 queryParam.getPageSize()
@@ -167,6 +171,7 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
 
         IPage<orders> resultPage = this.page(page, queryWrapper);
 
+        // 计算总页数
         int pageCount = (int) Math.ceil((double) resultPage.getTotal() / queryParam.getPageSize());
 
         return new PageResult<>(

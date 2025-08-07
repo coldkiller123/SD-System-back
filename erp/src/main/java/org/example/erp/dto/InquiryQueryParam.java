@@ -3,8 +3,7 @@ package org.example.erp.dto;
 public class InquiryQueryParam {
     private Integer pageIndex = 0; // 默认第0页
     private Integer pageSize = 10; // 默认每页10条
-    private String inquiryId; // 询价单号模糊搜索
-    private String customerName; // 客户名称模糊搜索
+    private String search; // 综合搜索：询价单号、客户名称等
     private String status; // 状态筛选（未报价/已报价）
 
     // Getters and Setters
@@ -24,20 +23,12 @@ public class InquiryQueryParam {
         this.pageSize = pageSize;
     }
 
-    public String getInquiryId() {
-        return inquiryId;
+    public String getSearch() {
+        return search;
     }
 
-    public void setInquiryId(String inquiryId) {
-        this.inquiryId = inquiryId;
-    }
-
-    public String getCustomerName() {
-        return customerName;
-    }
-
-    public void setCustomerName(String customerName) {
-        this.customerName = customerName;
+    public void setSearch(String search) {
+        this.search = search;
     }
 
     public String getStatus() {
