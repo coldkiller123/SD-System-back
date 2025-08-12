@@ -64,9 +64,10 @@ public class customersController {
             @RequestParam(required = false) Integer pageSize,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String region,
-            @RequestParam(required = false) String industry) {
+            @RequestParam(required = false) String industry,
+            @RequestParam(required = false) String creditRating) {
 
-        return customerService.getCustomerList(pageIndex, pageSize, name, region, industry);
+        return customerService.getCustomerList(pageIndex, pageSize, name, region, industry,creditRating);
     }
 
     //查询客户信息详情
