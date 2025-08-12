@@ -245,7 +245,7 @@ public class CustomerServiceImpl implements CustomerService {
     private int getMaxSerialNumberByRegion(String regionCode) {
         QueryWrapper<customers> queryWrapper = new QueryWrapper<>();
         queryWrapper.likeRight("id", "CUS" + regionCode);
-        queryWrapper.select("MAX(SUBSTRING(id, 6)) as maxSerial"); // 截取后5位流水号
+        queryWrapper.select("MAX(RIGHT(id, 5)) as maxSerial"); // 截取后5位流水号
 
         List<Map<String, Object>> result = customersMapper.selectMaps(queryWrapper);
 
