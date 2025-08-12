@@ -19,7 +19,7 @@ public interface CustomerService {
 
     // 分页查询客户列表
     CustomerListResponse getCustomerList(int pageIndex, Integer pageSize,
-                                         String name, String region, String industry);
+                                         String name, String region, String industry, String creditRating);
 
     //上传客户附件
     FileUploadResponse uploadAttachments(String customerId, MultipartFile[] files);
@@ -29,4 +29,5 @@ public interface CustomerService {
 
     // 根据关键词搜索客户（匹配ID或姓名）
     List<CustomerSearchDTO> searchCustomers(String keyword);
+
 }

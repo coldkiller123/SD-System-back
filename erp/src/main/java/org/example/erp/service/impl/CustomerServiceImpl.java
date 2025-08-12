@@ -263,7 +263,7 @@ public class CustomerServiceImpl implements CustomerService {
     //查询客户分页
     @Override
     public CustomerListResponse getCustomerList(int pageIndex, Integer pageSize,
-                                                String name, String region, String industry) {
+                                                String name, String region, String industry, String creditRating) {
         // 设置默认分页大小
         int defaultPageSize = 10;
         if (pageSize == null || pageSize <= 0) {
@@ -289,6 +289,11 @@ public class CustomerServiceImpl implements CustomerService {
         // 按行业筛选
         if (industry != null && !industry.trim().isEmpty()&&!"all".equals(industry.trim())) {
             queryWrapper.eq("industry", industry.trim());
+        }
+
+        // 按信用筛选
+        if (creditRating != null && !creditRating.trim().isEmpty()&&!"all".equals(creditRating.trim())) {
+            queryWrapper.eq("creditRating", creditRating.trim());
         }
 
         // 执行分页查询
@@ -450,7 +455,7 @@ public class CustomerServiceImpl implements CustomerService {
                 attachments attachment = new attachments();
                 attachment.setCustomerId(customerId);
                 attachment.setFileName(originalFilename); // 保存原始文件名
-                attachment.setFilePath("/uploads/" + customerId + "/" + filename); // 存储相对路径
+                attachment.setFilePath(customerId + "/" + filename); // 存储相对路径
                 attachmentsMapper.insert(attachment);
 
                 // 3.5 添加到响应列表
