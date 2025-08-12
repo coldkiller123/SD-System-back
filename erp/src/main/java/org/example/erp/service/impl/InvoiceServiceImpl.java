@@ -137,36 +137,47 @@ public class InvoiceServiceImpl implements InvoiceService {
         if (order == null) {
             throw new RuntimeException("订单不存在: " + orderId);
         }
-        // 新增校验：判断是否已开具发票
-        if (order.isHasInvoice()) {  // 直接判断hasInvoice字段（假设该字段为boolean类型）
-            throw new RuntimeException("订单" + orderId + "已开具发票，不可重复开具");
+
+        // 2. 检查是否已开具发票
+        if (order.isHasInvoice()) {
+            // 已开票：查询已有发票（改用QueryWrapper手动构建查询，避免方法名解析问题）
+            QueryWrapper<invoices> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("orderId", orderId); // 明确指定查询条件：order_id = 订单ID
+            invoices existingInvoice = invoicesMapper.selectOne(queryWrapper); // 使用selectOne查询唯一结果
+
+            if (existingInvoice == null) {
+                throw new RuntimeException("订单" + orderId + "标记已开票，但未查询到发票记录");
+            }
+            // 构建已有发票的响应
+            return buildInvoiceResponse(existingInvoice, order, orderId);
         }
-        // 校验订单状态是否为“已完成”
+
+        // 3. 未开票：校验订单状态
         if (!"已完成".equals(order.getStatus())) {
             throw new RuntimeException("订单" + orderId + "状态不是“已完成”，无法生成发票");
         }
 
-        // 2. 查询客户信息
+        // 4. 查询客户信息
         customers customer = customersMapper.selectById(order.getCustomerId());
         if (customer == null) {
             throw new RuntimeException("客户不存在: " + order.getCustomerId());
         }
 
-        // 3. 查询产品信息
+        // 5. 查询产品信息
         products product = productsMapper.selectById(order.getProductId());
         if (product == null) {
             throw new RuntimeException("产品不存在: " + order.getProductId());
         }
 
-        // 4. 生成发票ID（使用新规则生成）
+        // 6. 生成发票ID（使用原规则）
         String invoiceId = generateInvoiceId();
 
-        // 5. 计算日期（开具日期为当前时间，截止日期为30天后）
+        // 7. 计算日期
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         LocalDateTime dueDate = now.plusDays(30);
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
 
-        // 6. 保存发票记录到数据库
+        // 8. 保存发票记录
         invoices invoice = new invoices();
         invoice.setInvoiceId(invoiceId);
         invoice.setOrderId(orderId);
@@ -177,28 +188,45 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoice.setPaidAmount(order.getPaidAmount());
         invoice.setDueAmount(order.getTotalAmount().subtract(order.getPaidAmount()));
         invoicesMapper.insert(invoice);
-        order.setHasInvoice(true); // 设置为已开票
-        ordersMapper.updateById(order); // 保存更新
 
-        // 7. 构建响应DTO
+        // 更新订单开票状态
+        order.setHasInvoice(true);
+        ordersMapper.updateById(order);
+
+        // 9. 记录活动日志
+        ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
+        activityService.recordActivity(
+                "新发票开具",
+                "发票号：" + invoiceId,
+                "财务管理",
+                "purple"
+        );
+
+        // 10. 构建并返回新发票响应
+        return buildInvoiceResponse(invoice, order, orderId);
+    }
+    // 新增：复用的响应构建方法（同时支持新发票和已有发票）
+    private InvoiceGenerateResponse buildInvoiceResponse(invoices invoice, orders order, String orderId) {
+        // 构建基础响应
         InvoiceGenerateResponse response = new InvoiceGenerateResponse();
-        response.setInvoiceId(invoiceId);
+        response.setInvoiceId(invoice.getInvoiceId());
         response.setOrderId(orderId);
-        response.setIssueDate(now.format(formatter));
-        response.setDueDate(dueDate.format(formatter));
-        response.setTaxRate(new BigDecimal("0.13"));
-        response.setStatus("已完成");
+        response.setIssueDate(invoice.getIssueDate());
+        response.setDueDate(invoice.getDueDate());
+        response.setTaxRate(invoice.getTaxRate());
+        response.setStatus("已完成"); // 无论是新生成还是已存在，状态均为已完成
 
-        // 8. 设置客户信息
+        // 设置客户信息
+        customers customer = customersMapper.selectById(order.getCustomerId());
         InvoiceGenerateResponse.Customer customerDTO = new InvoiceGenerateResponse.Customer();
         customerDTO.setId(customer.getId());
         customerDTO.setName(customer.getName());
         customerDTO.setAddress(customer.getAddress());
-        // 假设客户表中有taxId字段，如果没有可以设置为默认值
         customerDTO.setTaxId(customer.getTaxId() != null ? customer.getTaxId() : "TAX" + System.currentTimeMillis());
         response.setCustomer(customerDTO);
 
-        // 9. 设置商品信息
+        // 设置商品信息
+        products product = productsMapper.selectById(order.getProductId());
         List<InvoiceGenerateResponse.Item> items = new ArrayList<>();
         InvoiceGenerateResponse.Item item = new InvoiceGenerateResponse.Item();
         item.setId(product.getId());
@@ -208,14 +236,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         item.setDescription(product.getDescription());
         items.add(item);
         response.setItems(items);
-        // 记录活动日志
-        ActivityService activityService = SpringContextHolder.getBean(ActivityService.class);
-        activityService.recordActivity(
-                "新发票开具",
-                "发票号：" + invoiceId,
-                "财务管理",
-                "purple"
-        );
 
         return response;
     }
