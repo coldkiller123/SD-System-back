@@ -498,6 +498,12 @@ public class OrderServiceImpl extends ServiceImpl<ordersMapper, orders> implemen
                     .or().like(orders::getCustomerName, search) // 客户名称
             );
         }
+        // 简洁排序：已发货在前，已完成在后
+        // 原理：通过状态字符串的比较进行排序（"已发货".compareTo("已完成") 结果为负数，会排在前面）
+        queryWrapper.orderByAsc(orders::getStatus);
+
+        // 次要排序：按创建时间倒序（最新的在前）
+        queryWrapper.orderByDesc(orders::getCreatedAt);
 
         // 5. 执行分页查询
         Page<orders> resultPage = ordersMapper.selectPage(orderPage, queryWrapper);
