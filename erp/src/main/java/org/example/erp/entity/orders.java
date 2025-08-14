@@ -6,20 +6,20 @@ import java.math.BigDecimal;
 
 @TableName("orders")
 public class orders {
-    private String id;
-    private String customerId;
-    private String customerName;
-    private String productId;
-    private String productName;
-    private BigDecimal quantity;
-    private BigDecimal unitPrice;
-    private BigDecimal totalAmount;
-    private BigDecimal paidAmount;
-    private boolean hasInvoice;
-    private String status;
-    private String salesPerson;
-    private String remarks;
-    private String createdAt;
+    private String id;// 主键ID，采用UUID自动生成
+    private String customerId;// 客户ID
+    private String customerName;// 客户名称
+    private String productId;// 产品ID
+    private String productName;// 产品名称
+    private BigDecimal quantity;// 订单数量
+    private BigDecimal unitPrice;// 单价
+    private BigDecimal totalAmount;// 总金额
+    private BigDecimal paidAmount;// 已付金额
+    private boolean hasInvoice;// 是否已开票
+    private String status;// 订单状态（如：待处理、已完成、已取消等）
+    private String salesPerson;// 销售人员
+    private String remarks;// 备注信息
+    private String createdAt;// 创建时间
 
     public String getId() {
         return id;
