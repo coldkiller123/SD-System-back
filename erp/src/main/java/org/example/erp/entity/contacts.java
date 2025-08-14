@@ -6,15 +6,29 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import static com.baomidou.mybatisplus.annotation.IdType.AUTO;
 
+/**
+ * 联系人实体类
+ * 对应数据库contacts表，存储联系人相关信息
+ */
 @TableName("contacts")
 public class contacts {
+    // 主键ID，自增
     @TableId(type = AUTO)
     private int id;
+
+    // 联系人姓名
     private String name;
+
+    // 联系人邮箱
     private String email;
+
+    // 联系人电话
     private String phone;
+
+    // 联系人职位
     private String position;
 
+    // getter和setter方法
     public String getPosition() {
         return position;
     }

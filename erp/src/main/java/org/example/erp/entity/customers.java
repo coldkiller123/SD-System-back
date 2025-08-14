@@ -4,24 +4,60 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 
 
+/**
+ * 客户实体类
+ * 对应数据库customers表，存储客户相关信息
+ */
 @TableName("customers")
 public class customers {
+    // 客户ID
     private String id;
+
+    // 客户名称
     private String name;
+
+    // 客户类型
     private String type;
+
+    // 所在地区
     private String region;
+
+    // 所属行业
     private String industry;
+
+    // 公司名称
     private String company;
+
+    // 联系电话
     private String phone;
+
+    // 公司地址
     private String address;
+
+    // 信用评级
     private String creditRating;
+
+    // 关联的联系人ID
     private int contactId;
+
+    // 备注信息
     private String remarks;
+
+    // 税务登记号
     private String taxId;
+
+    // 创建时间
     private String createdAt;
+
+    // 修改时间
     @TableField("modifiedAt")
     private String modifiedAt;
 
+    // 修改人
+    @TableField("modifiedBy")
+    private String modifiedBy;
+
+    // getter和setter方法
     public String getModifiedAt() {
         return modifiedAt;
     }
@@ -37,9 +73,6 @@ public class customers {
     public void setModifiedBy(String modifiedBy) {
         this.modifiedBy = modifiedBy;
     }
-
-    @TableField("modifiedBy")
-    private String modifiedBy;
 
     public String getId() {
         return id;

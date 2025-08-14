@@ -9,15 +9,15 @@ import java.math.BigDecimal;
 @TableName("invoices")
 public class invoices {
     @TableId(type = IdType.ASSIGN_UUID)
-    private String invoiceId;
-    private String orderId;
-    private String deliveryOrderId;
-    private String issueDate;
-    private String dueDate;
-    private BigDecimal taxRate;
-    private BigDecimal totalAmount;
-    private BigDecimal paidAmount;
-    private BigDecimal dueAmount;
+    private String invoiceId;// 主键ID，采用UUID自动生成
+    private String orderId;// 订单ID，关联原始订单
+    private String deliveryOrderId;// 发货单ID，关联发货单
+    private String issueDate;// 开票日期
+    private String dueDate;// 到期日期
+    private BigDecimal taxRate;// 税率
+    private BigDecimal totalAmount;// 总金额
+    private BigDecimal paidAmount;// 已付金额
+    private BigDecimal dueAmount;// 应付金额
 
     public String getInvoiceId() {
         return invoiceId;

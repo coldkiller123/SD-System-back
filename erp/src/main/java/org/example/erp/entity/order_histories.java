@@ -8,11 +8,11 @@ import static com.baomidou.mybatisplus.annotation.IdType.AUTO;
 @TableName("order_histories")
 public class order_histories {
     @TableId(type=AUTO)
-    private int id;
-    private String orderId;
-    private String modifiedBy;
-    private String modifiedAt;
-    private String remarks;
+    private int id;// 主键ID，自增
+    private String orderId;// 关联的订单ID
+    private String modifiedBy;// 修改人
+    private String modifiedAt;// 修改时间
+    private String remarks;// 备注信息
 
     public int getId() {
         return id;

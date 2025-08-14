@@ -9,11 +9,11 @@ import java.math.BigDecimal;
 @TableName("products")
 public class products {
     @TableId(type = IdType.ASSIGN_UUID)
-    private String id;
-    private String name;
-    private String description;
-    private BigDecimal unitPrice;
-    private BigDecimal quantity;
+    private String id;// 主键ID，采用UUID自动生成
+    private String name;// 产品名称
+    private String description;// 产品描述
+    private BigDecimal unitPrice;// 产品单价
+    private BigDecimal quantity;// 产品数量
 
     public String getId() {
         return id;

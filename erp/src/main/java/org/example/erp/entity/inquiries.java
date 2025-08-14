@@ -9,16 +9,16 @@ import java.math.BigDecimal;
 @TableName("inquiries")
 public class inquiries {
     @TableId(type = IdType.INPUT)
-    private String inquiryId;
-    private String customerId;
-    private String customerName;
-    private String productId;
-    private String productName;
-    private BigDecimal quantity;
-    private String unit;
-    private String salesPerson;
-    private String inquiryDate;
-    private String status;
+    private String inquiryId;// 主键ID，采用输入方式
+    private String customerId;// 客户ID
+    private String customerName;// 客户名称
+    private String productId;// 产品ID
+    private String productName;// 产品名称
+    private BigDecimal quantity;// 询价数量
+    private String unit;// 计量单位
+    private String salesPerson;// 销售人员
+    private String inquiryDate;// 询价日期
+    private String status;// 询价状态
 
     public String getInquiryId() {
         return inquiryId;
