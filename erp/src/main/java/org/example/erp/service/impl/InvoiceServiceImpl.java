@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -173,7 +174,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         String invoiceId = generateInvoiceId();
 
         // 7. 计算日期
-        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
         LocalDateTime dueDate = now.plusDays(30);
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
 
